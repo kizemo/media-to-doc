@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-18
+最后更新:2026-07-18(Phase 1 W3 完成)
 
 ---
 
@@ -44,26 +44,26 @@
 > 参考实现的 11 阶段流水线已验证可用,本项目复刻并保持架构一致。
 > 每阶段:实现 → 测试 → 跑通 → commit,不积压。
 
-- [ ] **`audio`** — ffmpeg 抽音(`ffmpeg_utils.py` + `audio.py`)
-- [ ] **`asr`** — Faster-Whisper 转写,CUDA fp16(`asr.py`)
-- [ ] **`frames`** — PySceneDetect + pHash 去重(`frames.py`)
-- [ ] **`ocr`** — RapidOCR(`ocr.py`)
-- [ ] **`asr_correct`** — OCR × ASR 8s 校对(`asr_correct.py`)
-- [ ] **`chapters`** — LLM 章节切分,新 schema:`summary/key_points/image_refs/illustrations`(`chapters.py`)
-- [ ] **`draft`** — 章节草稿生成(`draft.py`)
-- [ ] **`imagegen`** — SDXL Base + Refiner,可跳过(`imagegen.py`)
-- [ ] **`render`** — Markdown + HTML,相对路径(`render.py`)
-- [ ] **`longdoc`** — 借鉴 long-doc-processor skill,深度净化 + TOC HTML(`longdoc.py`)
-- [ ] **`verify`** — gatekeeper + image_refs 校验(`verify.py`)
+- [x] **`audio`** — ffmpeg 抽音(`ffmpeg_utils.py` + `audio.py`)— **W1**
+- [x] **`asr`** — Faster-Whisper 转写,CUDA fp16(`asr.py`)— **W1**
+- [x] **`frames`** — PySceneDetect + pHash 去重(`frames.py`)— **W1**
+- [x] **`ocr`** — RapidOCR(`ocr.py`)— **W2**
+- [x] **`asr_correct`** — OCR × ASR 8s 校对(`asr_correct.py`)— **W2**
+- [x] **`chapters`** — LLM 章节切分,新 schema:`summary/key_points/image_refs/illustrations`(`chapters.py`)— **W2**
+- [x] **`draft`** — 章节草稿生成(`draft.py`)— **W3**
+- [x] **`imagegen`** — SDXL Base + Refiner,可跳过(`imagegen.py`)— **W3**
+- [x] **`render`** — Markdown + HTML,相对路径(`render.py`)— **W3**
+- [ ] **`longdoc`** — 借鉴 long-doc-processor skill,深度净化 + TOC HTML(`longdoc.py`)— **W4 待办**
+- [ ] **`verify`** — gatekeeper + image_refs 校验(`verify.py`)— **W4 待办**
 
 ---
 
 ## Phase 3 — LLM provider 抽象(L1)
 
-- [ ] `llm.py` 抽象:统一 `chat_text(prompt, **kwargs)` 接口
-- [ ] `ollama` provider(默认)
-- [ ] `anthropic` provider(`ANTHROPIC_API_KEY`)
-- [ ] `openai_compatible` provider(`OPENAI_BASE_URL` + `OPENAI_API_KEY`)— 支持 MiniMax/DeepSeek/智谱/Moonshot/混元/OpenRouter
+- [x] `llm/__init__.py` 抽象:统一 `provider.chat(prompt)` 接口
+- [x] `ollama` provider(默认)
+- [x] `anthropic` provider(`ANTHROPIC_API_KEY`)
+- [x] `openai_compatible` provider(`OPENAI_BASE_URL` + `OPENAI_API_KEY`)— 支持 MiniMax/DeepSeek/智谱/Moonshot/混元/OpenRouter
 
 ---
 
@@ -222,3 +222,37 @@
   - chapters JSON 解析做宽松适配(围栏 / 前缀文字 / `[` 到 `]` 切片)
   - 7 个 LLM 厂商 preset(minimax / deepseek / zhipu / moonshot / openrouter / dashscope / hunyuan)
 - 下次会话第一句话:承接 `handoff-pipeline-w2-2026-07-18.md`,启动 W3(draft + imagegen + render)
+
+### 会话 6 — Phase 1 W2 OCR + ASR 校对 + LLM + 章节切分(2026-07-18,~1.5 小时)
+
+- 完成任务(ROADMAP Phase 1 W2 全完成,211 → 212 测试):
+  - 分支:`feat/pipeline-w2-ocr-chapters`
+  - `src/media_to_doc/llm/`:base.py(ABC + HealthStatus)+ ollama + anthropic + openai_compat(7 preset) + __init__
+  - `src/media_to_doc/pipeline/`:ocr(RapidOCR 容错)+ asr_correct(sliding window)+ chapters(LLM JSON 容错)
+  - 测试:79 → 212(+133 用例,3 skip)
+  - ruff:All checks passed
+  - W2 commit:`feat(pipeline): ocr + asr_correct + chapters + llm providers`(`f712552`)
+- 关键设计:
+  - `BaseLLMProvider` 自动累积调用统计 + health()(子类只实现 `_chat_impl`)
+  - chapters 用 LLM 输出新 schema(title/summary/start_seconds/end_seconds/key_points/image_refs/illustrations)
+  - `_chapters_wrapper` 把 config.llm 派生 provider,与 stages 的 `(work, config)` 签名一致
+- 下次会话第一句:承接 `handoff-pipeline-w3-2026-07-18.md`(刚刚写),启动 W4(longdoc + verify)
+
+### 会话 7 — Phase 1 W3 Draft + Imagegen + Render(2026-07-18,~1.5 小时)
+
+- 完成任务(ROADMAP Phase 1 W3 全完成):
+  - 分支:`feat/pipeline-w3-draft-imagegen-render`
+  - `src/media_to_doc/pipeline/`:draft(LLM 按章节切片 transcript + 双 prompt)+ imagegen(SDXL Base+Refiner + SkipProvider + ABC/Protocol 双轨)+ render(jinja2 + markdown lib + 相对路径 + TOC)
+  - `src/media_to_doc/pipeline/runner.py`:`_draft_wrapper` + STAGE_FUNCS 替换 3 占位 + `_invoke_stage` 3 分支 + `_resolve_drafts_dir` helper
+  - 测试:212 → 285(+73 用例,3 skip 不变)
+  - ruff:All checks passed
+  - W3 commit:`feat(pipeline): draft + imagegen + render stages`(`86694a0`)
+- 关键决策:
+  - `markdown + jinja2` 从 `[longdoc]` extras 上移到核心 deps(render 是核心 stage)
+  - imagegen 用 ABC + Protocol 双轨(产品代码 ABC,测试 duck-typed)
+  - draft 默认输出 `chapters_dir/raw/<stem>/`(work 内),runner 后续可注入 `inbox/`
+  - render 在拼装时把 `![[gen_*.png]]` 重写为 `![Image](<stem>/images/gen_*.png)`,缺失图自动退化为警告文字
+  - `_load_chapters_report` 在 draft / render 各重复一次(15 行 helper,纯加法原则不动 chapters.py)
+  - B023 closure 问题用显式 `search + append + advance pos` 替代 iterator 闭包
+- 下次会话第一句:承接 `handoff-pipeline-w3-2026-07-18.md`,启动 W4(longdoc + verify)
+
