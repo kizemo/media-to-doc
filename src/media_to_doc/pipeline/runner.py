@@ -1,9 +1,9 @@
 """流水线编排器(runner)— 串起 11 stage。
 
-W2 状态(2026-07-18):
-- 6 stage 真实实现:``audio`` / ``asr`` / ``frames`` / ``ocr`` / ``asr_correct`` / ``chapters``
-- 5 stage 仍抛 :class:`NotImplementedError`(:mod:`draft` / :mod:`imagegen` /
-  :mod:`render` / :mod:`longdoc` / :mod:`verify`,W3/W4 逐步实装)
+W3 状态(2026-07-18):
+- 9 stage 真实实现:``audio`` / ``asr`` / ``frames`` / ``ocr`` / ``asr_correct`` /
+  ``chapters`` / ``draft`` / ``imagegen`` / ``render``
+- 2 stage 仍抛 :class:`NotImplementedError`(:mod:`longdoc` / :mod:`verify`,W4 实装)
 - LE hooks 尚未接入(Phase 5,见 handoff-skeleton-bootstrap §5.2)
 
 核心职责:
@@ -30,8 +30,11 @@ from .asr import transcribe
 from .asr_correct import correct_asr
 from .audio import prepare_audio
 from .chapters import split_chapters
+from .draft import generate_drafts
 from .frames import extract_keyframes
+from .imagegen import generate_images
 from .ocr import run_ocr
+from .render import render_outputs
 
 # ─────────────────────────────────────────────────────────────
 # STAGE_FUNCS — stage 名 → 函数映射(便于 runner 调度 + 测试覆盖)
@@ -41,7 +44,7 @@ from .ocr import run_ocr
 # 占位:未实现的 stage 抛清晰错误
 def _not_implemented_stage(*args: Any, **kwargs: Any) -> None:
   raise NotImplementedError(
-    f"Stage {kwargs.get('_stage_name', '?')} 尚未实装(Phase 1 W2+)",
+    f"Stage {kwargs.get('_stage_name', '?')} 尚未实装(Phase 1 W4+)",
   )
 
 
@@ -66,6 +69,23 @@ def _chapters_wrapper(work: Path, config: WorkflowConfig) -> Any:
   return split_chapters(work, provider, config)
 
 
+def _draft_wrapper(work: Path, config: WorkflowConfig) -> Any:
+  """draft 阶段的包装:从 config 派生 LLM provider,再调 generate_drafts。"""
+  from ..llm import get_provider
+
+  llm_cfg = config.llm
+  provider = get_provider(
+    llm_cfg.provider,
+    model=llm_cfg.model,
+    api_key=llm_cfg.api_key_ref,
+    base_url=llm_cfg.base_url,
+    temperature=llm_cfg.temperature,
+    max_tokens=llm_cfg.max_tokens,
+    timeout_seconds=llm_cfg.timeout_seconds,
+  )
+  return generate_drafts(work, provider, config)
+
+
 STAGE_FUNCS: dict[str, Callable[..., Any]] = {
   "audio": prepare_audio,           # audio(inbox, work, config)
   "asr": transcribe,                # asr(work, config, ...)
@@ -73,9 +93,9 @@ STAGE_FUNCS: dict[str, Callable[..., Any]] = {
   "ocr": run_ocr,                   # ocr(img_dir, config, output_dir=, manifest_path=)
   "asr_correct": correct_asr,       # asr_correct(work, config, ocr_dir=, transcript_path=, output_path=)
   "chapters": _chapters_wrapper,    # chapters(work, config) → 内部调 LLM
-  "draft": _not_implemented_stage,
-  "imagegen": _not_implemented_stage,
-  "render": _not_implemented_stage,
+  "draft": _draft_wrapper,          # draft(work, config) → 内部调 LLM
+  "imagegen": generate_images,      # imagegen(work, config)
+  "render": render_outputs,         # render(work, config)
   "longdoc": _not_implemented_stage,
   "verify": _not_implemented_stage,
 }
@@ -252,8 +272,58 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
     func(ctx.work, ctx.config)
     return
 
+  if stage == "draft":
+    # draft 依赖 chapters + asr
+    if not (ctx.work / "chapters" / "chapters.json").exists():
+      raise FileNotFoundError(
+        "draft stage 需要 chapters.json;请先跑 chapters stage"
+      )
+    if not (ctx.work / "asr" / "transcript.jsonl").exists():
+      raise FileNotFoundError(
+        "draft stage 需要 transcript.jsonl;请先跑 asr stage"
+      )
+    func(ctx.work, ctx.config)
+    return
+
+  if stage == "imagegen":
+    # imagegen 依赖 draft(产物 chapter_NN.md)
+    drafts_dir = _resolve_drafts_dir(ctx.work)
+    if drafts_dir is None:
+      raise FileNotFoundError(
+        "imagegen stage 需要 drafts 目录(含 chapter_NN.md);请先跑 draft stage"
+      )
+    func(ctx.work, ctx.config, drafts_dir=drafts_dir)
+    return
+
+  if stage == "render":
+    # render 依赖 chapters + draft
+    if not (ctx.work / "chapters" / "chapters.json").exists():
+      raise FileNotFoundError(
+        "render stage 需要 chapters.json;请先跑 chapters stage"
+      )
+    drafts_dir = _resolve_drafts_dir(ctx.work)
+    if drafts_dir is None:
+      raise FileNotFoundError(
+        "render stage 需要 drafts 目录;请先跑 draft stage"
+      )
+    func(ctx.work, ctx.config)
+    return
+
   # 占位 stage(目前 _not_implemented_stage)
   func(_stage_name=stage)
+
+
+def _resolve_drafts_dir(work: Path) -> Path | None:
+  """``<work>/chapters/raw/<video_stem>`` 派生(读 chapters.json 的 video)。"""
+  chapters_json = work / "chapters" / "chapters.json"
+  if not chapters_json.exists():
+    return None
+  import json as _json
+
+  data = _json.loads(chapters_json.read_text(encoding="utf-8"))
+  stem = (data.get("video") or "").strip() or "output"
+  candidate = work / "chapters" / "raw" / stem
+  return candidate if candidate.exists() else None
 
 
 def _read_segment_endpoints(work: Path) -> list[float]:
@@ -293,7 +363,7 @@ def run_pipeline(
   skip_completed: bool = True,
   stop_after: str | None = None,
 ) -> PipelineResult:
-  """完整流水线入口(W1:仅 audio → asr → frames,其余抛 NotImplementedError)。
+  """完整流水线入口(W3:audio → render,后 2 stage 待 W4 实装)。
 
   Parameters
   ----------
@@ -316,7 +386,7 @@ def run_pipeline(
   Raises
   ------
   NotImplementedError
-    当前 W1 跑过 frames 后再跑下游 stage 会抛
+    W3 跑过 render 后再跑下游 stage 会抛
   Exception
     任何 stage 失败会上抛(已 mark & save state)
   """

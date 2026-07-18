@@ -42,6 +42,8 @@ dependencies = [
   "pydantic>=2.7.0",     # 配置数据类 + 校验
   "pyyaml>=6.0.1",       # YAML 配置加载
   "python-dotenv>=1.0.1", # .env 文件加载
+  "markdown>=3.6.0",     # render 阶段 md → html
+  "jinja2>=3.1.0",       # render 阶段 html 模板
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -52,7 +54,7 @@ dependencies = [
 # - frames: PySceneDetect + 图像哈希
 # - ocr:    RapidOCR
 # - imagegen: SDXL Base + Refiner(diffusers)
-# - longdoc: jinja2 + markdown + BeautifulSoup(深度净化)
+# - longdoc: BeautifulSoup + lxml(深度净化,markdown/jinja2 已上移)
 # - all:    一键装全
 # ─────────────────────────────────────────────────────────────
 [project.optional-dependencies]
@@ -89,8 +91,6 @@ imagegen = [
   "safetensors>=0.4.0",
 ]
 longdoc = [
-  "jinja2>=3.1.0",
-  "markdown>=3.6.0",
   "beautifulsoup4>=4.12.0",
   "lxml>=5.2.0",
 ]

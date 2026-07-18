@@ -44,17 +44,20 @@ def test_stage_funcs_implemented_stages_present() -> None:
 
 
 def test_stage_funcs_unimplemented_raise() -> None:
-  """W2 状态:draft/imagegen/render/longdoc/verify 5 个仍未实装,调用抛 NotImplementedError。"""
-  for stage in ("draft", "imagegen", "render", "longdoc", "verify"):
+  """W3 状态:longdoc/verify 2 个仍未实装(其余 9 个真实),调用抛 NotImplementedError。"""
+  for stage in ("longdoc", "verify"):
     with pytest.raises(NotImplementedError, match=stage):
       STAGE_FUNCS[stage](_stage_name=stage)
 
 
 def test_stage_funcs_real_stages_resolve() -> None:
-  """W2 实装的 6 个 stage 必须是真函数(非 _not_implemented_stage)。"""
+  """W3 实装的 9 个 stage 必须是真函数(非 _not_implemented_stage)。"""
   from media_to_doc.pipeline.runner import _not_implemented_stage
 
-  real_stages = ("audio", "asr", "frames", "ocr", "asr_correct", "chapters")
+  real_stages = (
+    "audio", "asr", "frames", "ocr", "asr_correct",
+    "chapters", "draft", "imagegen", "render",
+  )
   for stage in real_stages:
     func = STAGE_FUNCS[stage]
     assert func is not _not_implemented_stage, f"{stage} 仍是占位"

@@ -1286,6 +1286,8 @@ name = "media-to-doc"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "jinja2" },
+    { name = "markdown" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -1303,9 +1305,7 @@ all = [
     { name = "faster-whisper" },
     { name = "httpx" },
     { name = "imagehash" },
-    { name = "jinja2" },
     { name = "lxml" },
-    { name = "markdown" },
     { name = "mcp" },
     { name = "ollama" },
     { name = "openai" },
@@ -1347,9 +1347,7 @@ llm = [
 ]
 longdoc = [
     { name = "beautifulsoup4" },
-    { name = "jinja2" },
     { name = "lxml" },
-    { name = "markdown" },
 ]
 mcp = [
     { name = "mcp" },
@@ -1368,9 +1366,9 @@ requires-dist = [
     { name = "faster-whisper", marker = "extra == 'asr'", specifier = ">=1.0.0" },
     { name = "httpx", marker = "extra == 'llm'", specifier = ">=0.27.0" },
     { name = "imagehash", marker = "extra == 'frames'", specifier = ">=4.3.1" },
-    { name = "jinja2", marker = "extra == 'longdoc'", specifier = ">=3.1.0" },
+    { name = "jinja2", specifier = ">=3.1.0" },
     { name = "lxml", marker = "extra == 'longdoc'", specifier = ">=5.2.0" },
-    { name = "markdown", marker = "extra == 'longdoc'", specifier = ">=3.6.0" },
+    { name = "markdown", specifier = ">=3.6.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "media-to-doc", extras = ["llm", "asr", "frames", "ocr", "imagegen", "longdoc", "mcp"], marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
