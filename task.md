@@ -203,3 +203,22 @@
   - `stop_after` 在已跳过 stage 上也生效(resume 语义正确)
   - ffmpeg 抽音频输入(mp3/wav/m4a)→ 直接 shutil.copy2 省一次转码
 - 下次会话第一句话:承接 `handoff-pipeline-w1-2026-07-18.md`,启动 W2(OCR + asr_correct + LLM providers + chapters)
+
+### 会话 6 — Phase 1 W2 OCR + ASR 校对 + LLM + 章节(2026-07-18,~1.5 小时)
+
+- 完成任务(ROADMAP Phase 1 W2 全完成):
+  - 分支:`feat/pipeline-w2-ocr-chapters`(基于 W1)
+  - `src/media_to_doc/llm/`:base / ollama / anthropic / openai_compat + `__init__` 注册表(5 模块)
+  - `src/media_to_doc/pipeline/`:ocr / asr_correct / chapters(3 模块)
+  - `runner.py` 替换 3 占位 + 新增 `_chapters_wrapper`(从 config 派生 LLM provider)
+  - `tests/test_llm/` + `tests/test_pipeline/` 新增 7 测试文件
+  - **pytest:79 → 212 passed (+133 用例)**,3 skip(可选 imagehash 依赖)
+  - **ruff:**All checks passed
+  - W2 commit:`feat(pipeline): ocr + asr_correct + chapters + llm providers`
+- 关键设计:
+  - LLM provider 基类自动累积调用/失败 + `health()`(LE L1 健康度评估用)
+  - `_extract_candidates` 用 sliding window 替代单 regex chunk,让"达摩盘"等局部专有名词被识别
+  - OCR 阶段单帧容错,失败时记录到 `OcrResult.error` 而不阻塞整 stage
+  - chapters JSON 解析做宽松适配(围栏 / 前缀文字 / `[` 到 `]` 切片)
+  - 7 个 LLM 厂商 preset(minimax / deepseek / zhipu / moonshot / openrouter / dashscope / hunyuan)
+- 下次会话第一句话:承接 `handoff-pipeline-w2-2026-07-18.md`,启动 W3(draft + imagegen + render)

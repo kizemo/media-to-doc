@@ -1,15 +1,16 @@
 """流水线编排器(runner)— 串起 11 stage。
 
-W1 状态:
-- 仅 ``audio`` / ``asr`` / ``frames`` 三个 stage 真实实现
-- 其余 8 个 stage 抛 :class:`NotImplementedError`(W2/W3/W4 逐步实装)
+W2 状态(2026-07-18):
+- 6 stage 真实实现:``audio`` / ``asr`` / ``frames`` / ``ocr`` / ``asr_correct`` / ``chapters``
+- 5 stage 仍抛 :class:`NotImplementedError`(:mod:`draft` / :mod:`imagegen` /
+  :mod:`render` / :mod:`longdoc` / :mod:`verify`,W3/W4 逐步实装)
 - LE hooks 尚未接入(Phase 5,见 handoff-skeleton-bootstrap §5.2)
 
 核心职责:
 1. 状态机:加载/保存 state.json,跳过已完成 stage
 2. 错误处理:stage 失败 → mark + 抛 + 不吞异常
 3. 上下文分发:每 stage 拿到 (inbox, work, config) + 各自的 kwargs
-4. W2+ 接入 ``logger.timed_stage()`` 替换裸 try/except
+4. Phase 5 接入 ``logger.timed_stage()`` 替换裸 try/except
 
 参考:TDD §4.1.3 ``pipeline/runner.py`` 伪代码 +
      LE 原型 ``_research/le_prototype/runner.py`` 接口约定(Phase 5 接入)。
@@ -26,8 +27,11 @@ from typing import Any
 from ..config import WorkflowConfig
 from ..state import STAGE_ORDER, StageState, State
 from .asr import transcribe
+from .asr_correct import correct_asr
 from .audio import prepare_audio
+from .chapters import split_chapters
 from .frames import extract_keyframes
+from .ocr import run_ocr
 
 # ─────────────────────────────────────────────────────────────
 # STAGE_FUNCS — stage 名 → 函数映射(便于 runner 调度 + 测试覆盖)
@@ -41,13 +45,34 @@ def _not_implemented_stage(*args: Any, **kwargs: Any) -> None:
   )
 
 
+def _chapters_wrapper(work: Path, config: WorkflowConfig) -> Any:
+  """chapters 阶段的实际包装:从 config 派生 LLM provider,再调 split_chapters。
+
+  设计原因:runner 的 STAGE_FUNCS 想保持 ``func(work, config)`` 统一签名,
+  但 :func:`split_chapters` 需要 provider 实例。包装层做工厂调用。
+  """
+  from ..llm import get_provider
+
+  llm_cfg = config.llm
+  provider = get_provider(
+    llm_cfg.provider,
+    model=llm_cfg.model,
+    api_key=llm_cfg.api_key_ref,
+    base_url=llm_cfg.base_url,
+    temperature=llm_cfg.temperature,
+    max_tokens=llm_cfg.max_tokens,
+    timeout_seconds=llm_cfg.timeout_seconds,
+  )
+  return split_chapters(work, provider, config)
+
+
 STAGE_FUNCS: dict[str, Callable[..., Any]] = {
   "audio": prepare_audio,           # audio(inbox, work, config)
   "asr": transcribe,                # asr(work, config, ...)
   "frames": extract_keyframes,      # frames(video, img_dir, work_dir, config, hint_timestamps)
-  "ocr": _not_implemented_stage,
-  "asr_correct": _not_implemented_stage,
-  "chapters": _not_implemented_stage,
+  "ocr": run_ocr,                   # ocr(img_dir, config, output_dir=, manifest_path=)
+  "asr_correct": correct_asr,       # asr_correct(work, config, ocr_dir=, transcript_path=, output_path=)
+  "chapters": _chapters_wrapper,    # chapters(work, config) → 内部调 LLM
   "draft": _not_implemented_stage,
   "imagegen": _not_implemented_stage,
   "render": _not_implemented_stage,
@@ -193,6 +218,38 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
     video = ctx.resolve_video()
     img_dir = ctx.img_dir or (ctx.inbox / "img")
     func(video, img_dir, ctx.work, ctx.config, ctx.hint_timestamps)
+    return
+
+  if stage == "ocr":
+    # ocr 跑前需要 frames 完成(关键帧存在)
+    img_dir = ctx.img_dir or (ctx.inbox / "img")
+    if not img_dir.exists() or not any(img_dir.iterdir()):
+      raise FileNotFoundError(
+        f"ocr stage 需要关键帧目录 {img_dir} 非空;请先跑 frames stage"
+      )
+    func(img_dir, ctx.config)
+    return
+
+  if stage == "asr_correct":
+    # asr_correct 依赖 asr 和 ocr 产物
+    if not (ctx.work / "asr" / "transcript.jsonl").exists():
+      raise FileNotFoundError(
+        "asr_correct stage 需要 transcript.jsonl;请先跑 asr stage"
+      )
+    func(ctx.work, ctx.config)
+    return
+
+  if stage == "chapters":
+    # chapters 依赖 asr + frames + (可选) asr_correct
+    if not (ctx.work / "asr" / "transcript.jsonl").exists():
+      raise FileNotFoundError(
+        "chapters stage 需要 transcript.jsonl;请先跑 asr stage"
+      )
+    if not (ctx.work / "frames" / "keyframes.json").exists():
+      raise FileNotFoundError(
+        "chapters stage 需要 keyframes.json;请先跑 frames stage"
+      )
+    func(ctx.work, ctx.config)
     return
 
   # 占位 stage(目前 _not_implemented_stage)
