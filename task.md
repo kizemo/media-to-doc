@@ -185,3 +185,21 @@
   - Python `>=3.11`(与参考实现一致)
 - 验证:`uv run pytest` 14/14 + `uv run ruff check` 全过 + `uv run mtd --version` = `media-to-doc 0.1.0`
 - 下次会话第一句话:承接 `handoff-skeleton-bootstrap-2026-07-18.md`,启动 Phase 1 核心流水线(11 stage 逐阶段实施)
+
+### 会话 5 — Phase 1 W1 核心流水线前 3 stage(2026-07-18,~1.5 小时)
+
+- 完成任务(ROADMAP Phase 1 W1 全完成):
+  - 分支:`feat/pipeline-w1-audio-asr-frames`
+  - `src/media_to_doc/utils/`:ffmpeg_utils / hash_utils / progress(3 模块)
+  - `src/media_to_doc/pipeline/`:audio / asr / frames / runner(4 模块)+ 顶层 `__init__.py`
+  - `tests/test_utils/` + `tests/test_pipeline/` 共 8 个测试文件
+  - **pytest:14 → 79 passed (+65 用例)**,3 skip(可选 imagehash 依赖)
+  - **ruff:**All checks passed
+  - W1 commit:`feat(pipeline): W1 — audio + asr + frames stages + utils + runner`
+- 关键设计:
+  - 11 个 stage 全部在 STAGE_FUNCS 占位,W1 真做 3 个,其余抛 `NotImplementedError`
+  - runner 用 `_invoke_stage(stage, func, ctx)` 分发,测试可注入 mock 函数
+  - stage 函数全部 lazy import 重依赖(faster-whisper / scenedetect / imagehash),缺库时给清晰 ImportError
+  - `stop_after` 在已跳过 stage 上也生效(resume 语义正确)
+  - ffmpeg 抽音频输入(mp3/wav/m4a)→ 直接 shutil.copy2 省一次转码
+- 下次会话第一句话:承接 `handoff-pipeline-w1-2026-07-18.md`,启动 W2(OCR + asr_correct + LLM providers + chapters)
