@@ -1,0 +1,155 @@
+[project]
+name = "media_to_doc"
+version = "0.1.0"
+description = "把本地音视频一键转化为带 AI 配图、可独立分发的 Markdown + HTML 讲义"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Duanyi", email = "duanyi@example.com" },
+]
+requires-python = ">=3.11"
+keywords = [
+  "lecture",
+  "transcript",
+  "asr",
+  "whisper",
+  "sdxl",
+  "markdown",
+  "mcp",
+  "ai-workflow",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Topic :: Text Processing :: Markup :: Markdown",
+]
+
+# ─────────────────────────────────────────────────────────────
+# 核心依赖(运行时必需):CLI + 配置 + 路径 + 协议
+# Phase 1 实施时逐步添加:torch / faster-whisper / scenedetect /
+#                        rapidocr / diffusers / mcp / openai / ollama
+# ─────────────────────────────────────────────────────────────
+dependencies = [
+  "typer>=0.12.0",       # CLI 框架
+  "rich>=13.7.0",        # 终端彩色输出 + 进度条
+  "pydantic>=2.7.0",     # 配置数据类 + 校验
+  "pyyaml>=6.0.1",       # YAML 配置加载
+  "python-dotenv>=1.0.1", # .env 文件加载
+]
+
+# ─────────────────────────────────────────────────────────────
+# 额外依赖分组(extras):
+# - dev:    开发/测试/CI
+# - llm:    LLM provider 抽象 + 各 provider SDK
+# - asr:    Faster-Whisper 语音转写
+# - frames: PySceneDetect + 图像哈希
+# - ocr:    RapidOCR
+# - imagegen: SDXL Base + Refiner(diffusers)
+# - longdoc: jinja2 + markdown + BeautifulSoup(深度净化)
+# - all:    一键装全
+# ─────────────────────────────────────────────────────────────
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+  "pytest-cov>=5.0.0",
+  "ruff>=0.5.0",
+  "mypy>=1.10.0",
+  "types-PyYAML>=6.0.12",
+]
+llm = [
+  "anthropic>=0.31.0",
+  "openai>=1.40.0",
+  "ollama>=0.3.0",
+  "httpx>=0.27.0",
+]
+asr = [
+  "faster-whisper>=1.0.0",
+  "ctranslate2>=4.0.0",
+]
+frames = [
+  "scenedetect>=0.6.0",
+  "imagehash>=4.3.1",
+  "pillow>=10.0.0",
+]
+ocr = [
+  "rapidocr-onnxruntime>=1.4.0",
+]
+imagegen = [
+  "torch>=2.3.0",
+  "diffusers>=0.30.0",
+  "transformers>=4.43.0",
+  "accelerate>=0.32.0",
+  "safetensors>=0.4.0",
+]
+longdoc = [
+  "jinja2>=3.1.0",
+  "markdown>=3.6.0",
+  "beautifulsoup4>=4.12.0",
+  "lxml>=5.2.0",
+]
+mcp = [
+  "mcp>=1.0.0",
+]
+all = [
+  "media_to_doc[llm,asr,frames,ocr,imagegen,longdoc,mcp]",
+]
+
+# ─────────────────────────────────────────────────────────────
+# CLI 入口(ADR-016:CLI 命令名 mtd,见 ROADMAP §0)
+# ─────────────────────────────────────────────────────────────
+[project.scripts]
+mtd = "media_to_doc.cli:app"
+mtd-mcp = "media_to_doc.mcp_server:main"
+
+# ─────────────────────────────────────────────────────────────
+# 项目 URL(Phase 6 发布后填真实地址)
+# ─────────────────────────────────────────────────────────────
+[project.urls]
+"Homepage" = "https://github.com/media-to-doc/media-to-doc"
+"Bug Tracker" = "https://github.com/media-to-doc/media-to-doc/issues"
+"Documentation" = "https://github.com/media-to-doc/media-to-doc#documentation"
+
+# ─────────────────────────────────────────────────────────────
+# 构建系统:hatchling + src/ 布局
+# ─────────────────────────────────────────────────────────────
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/media_to_doc"]
+
+# ─────────────────────────────────────────────────────────────
+# 工具配置(集中管理,后续 phase 渐进扩展)
+# ─────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = [
+  "E501",  # line too long(由 line-length 控制)
+  "B008",  # typer.Argument / typer.Option 默认值在函数签名中是 Typer 框架的标准用法
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+pythonpath = ["src"]

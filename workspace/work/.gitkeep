@@ -1,0 +1,4 @@
+# work:流水线中间产物(state.json / memory / pipeline_run.json)
+# 用法:mtd run 完成后自动创建 workspace/work/<course_name>/
+# 中断后 mtd resume workspace/work/<course_name>/ 从 state.json 恢复
+# 注意:本目录的子目录与文件不进 git(见 .gitignore workspace/work/*)

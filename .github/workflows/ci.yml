@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [master, feat/**, fix/**]
+  pull_request:
+    branches: [master]
+
+# 取消同分支前序运行(节省 CI 资源)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────────────────────────────────────────
+  # Python 后端测试与代码质量(Phase 0 启用)
+  # ───────────────────────────────────────────────────────────
+  python:
+    name: Python (windows-latest)
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.11.x"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Sync dependencies (with dev extras)
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
+
+      - name: Lint (ruff)
+        run: uv run --python ${{ matrix.python-version }} ruff check src/ tests/
+
+      - name: Format check (ruff)
+        run: uv run --python ${{ matrix.python-version }} ruff format --check src/ tests/
+
+      - name: Type check (mypy, lenient)
+        run: uv run --python ${{ matrix.python-version }} mypy src/media_to_doc/
+        continue-on-error: true  # Phase 0 类型注解宽松,逐步收紧
+
+      - name: Test (pytest)
+        run: uv run --python ${{ matrix.python-version }} pytest tests/ -v --maxfail=1
+
+      - name: Test coverage (pytest-cov,optional)
+        if: matrix.python-version == '3.12'
+        run: uv run --python ${{ matrix.python-version }} pytest tests/ --cov=media_to_doc --cov-report=term-missing
+        continue-on-error: true
+
+  # ───────────────────────────────────────────────────────────
+  # UI 构建(Phase 2+ 启用,Phase 0 注释掉)
+  # ───────────────────────────────────────────────────────────
+  # ui:
+  #   name: UI (windows-latest)
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
+  #     - run: npm ci
+  #       working-directory: ui
+  #     - run: npm run lint
+  #       working-directory: ui
+  #     - run: npm run test
+  #       working-directory: ui
+  #     - run: npm run build
+  #       working-directory: ui
+
+  # ───────────────────────────────────────────────────────────
+  # NSIS 安装器打包(Phase 3+ 启用)
+  # ───────────────────────────────────────────────────────────
+  # installer:
+  #   name: NSIS Installer
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Build installer
+  #       run: |
+  #         # NSIS 安装器构建脚本(Phase 3 实施时填实)
+  #         echo "NSIS build placeholder"

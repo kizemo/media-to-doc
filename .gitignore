@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────────────────────────
+# media-to-doc .gitignore
+# 遵循 CLAUDE.md §7 + ROADMAP Phase 0 + _research/ 不进 git
+# ─────────────────────────────────────────────────────────────
+
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.installed.cfg
+*.egg-info
+
+# ── 虚拟环境 ─────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── 测试与覆盖率 ────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.cache
+
+# ── 类型检查 ─────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pyright_cache/
+
+# ── 编辑器 / IDE ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── 项目专属:研究材料不入 git(Phase 5 迁 LE 原型到 src/ 再纳入) ──
+# _research/ 已纳入屏蔽(CLAUDE.md §4 + ROADMAP §0)
+_research/
+
+# ── 项目专属:运行时工作目录 ──────────────────────────────────
+# workspace/ 运行时数据(inbox 输入 + work 中间产物 + raw 产出)
+workspace/inbox/*
+workspace/work/*
+!workspace/inbox/.gitkeep
+!workspace/work/.gitkeep
+
+# ── 环境变量与密钥(严禁入 git,见 CLAUDE.md 安全红线) ──
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── 日志 ─────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── 模型与缓存(不进 git,用户本地保留) ───────────────────────
+models/
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# ── 构建产物 ─────────────────────────────────────────────────
+*.spec
+.mount/
