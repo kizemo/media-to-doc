@@ -71,6 +71,10 @@ class PipelineConfig:
   default_ocr_threshold: float = 0.5
   default_asr_window_seconds: int = 8
   skip_longdoc: bool = False
+  # longdoc 阶段 LLM 净化 provider:
+  # - ``"skip"`` (默认):不调 LLM,只跑规则清理(去时间戳 / 合并空行)
+  # - 其它值:用 :attr:`LLMConfig.provider` 调 LLM 逐块净化
+  longdoc_llm_provider: str = "skip"
 
 
 @dataclass

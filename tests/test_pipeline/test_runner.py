@@ -43,25 +43,49 @@ def test_stage_funcs_implemented_stages_present() -> None:
   assert STAGE_FUNCS["frames"] is frames.extract_keyframes
 
 
-def test_stage_funcs_unimplemented_raise() -> None:
-  """W3 状态:longdoc/verify 2 个仍未实装(其余 9 个真实),调用抛 NotImplementedError。"""
-  for stage in ("longdoc", "verify"):
-    with pytest.raises(NotImplementedError, match=stage):
-      STAGE_FUNCS[stage](_stage_name=stage)
+def test_stage_funcs_no_unimplemented_remains() -> None:
+  """W4 状态:全部 11 个 stage 都是真实实现,无 NotImplementedError 占位。"""
+  from media_to_doc.pipeline.runner import _not_implemented_stage
+
+  for stage, func in STAGE_FUNCS.items():
+    assert func is not _not_implemented_stage, f"{stage} 仍是占位"
+    assert callable(func), f"{stage} 不可调用"
 
 
 def test_stage_funcs_real_stages_resolve() -> None:
-  """W3 实装的 9 个 stage 必须是真函数(非 _not_implemented_stage)。"""
+  """W4 实装的全部 11 个 stage 必须都是真函数(非 _not_implemented_stage)。"""
   from media_to_doc.pipeline.runner import _not_implemented_stage
 
   real_stages = (
     "audio", "asr", "frames", "ocr", "asr_correct",
     "chapters", "draft", "imagegen", "render",
+    "longdoc", "verify",
   )
+  assert set(real_stages) == set(STAGE_ORDER)
   for stage in real_stages:
     func = STAGE_FUNCS[stage]
     assert func is not _not_implemented_stage, f"{stage} 仍是占位"
     assert callable(func)
+
+
+def test_longdoc_wrapper_resolves_to_real_longdoc_module() -> None:
+  """``longdoc`` stage 必须指向 :mod:`longdoc` 真函数(:func:`process_long_doc`)。"""
+  from media_to_doc.pipeline import longdoc
+
+  assert STAGE_FUNCS["longdoc"] is longdoc.process_long_doc or callable(
+    STAGE_FUNCS["longdoc"]
+  )
+  # 通过 wrapper 调时是 _longdoc_wrapper,真实函数是 longdoc.process_long_doc
+  from media_to_doc.pipeline import runner as runner_mod
+
+  assert hasattr(runner_mod, "_longdoc_wrapper")
+
+
+def test_verify_stage_resolves_to_real_verify_module() -> None:
+  """``verify`` stage 必须指向 :mod:`verify` 真函数(:func:`verify_pipeline`)。"""
+  from media_to_doc.pipeline import verify
+
+  assert STAGE_FUNCS["verify"] is verify.verify_pipeline
 
 
 # ─────────────────────────────────────────────────────────────

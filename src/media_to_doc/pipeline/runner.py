@@ -1,9 +1,9 @@
 """流水线编排器(runner)— 串起 11 stage。
 
-W3 状态(2026-07-18):
-- 9 stage 真实实现:``audio`` / ``asr`` / ``frames`` / ``ocr`` / ``asr_correct`` /
-  ``chapters`` / ``draft`` / ``imagegen`` / ``render``
-- 2 stage 仍抛 :class:`NotImplementedError`(:mod:`longdoc` / :mod:`verify`,W4 实装)
+W4 状态(2026-07-18):
+- 11 stage 全部实装:``audio`` / ``asr`` / ``frames`` / ``ocr`` / ``asr_correct`` /
+  ``chapters`` / ``draft`` / ``imagegen`` / ``render`` / ``longdoc`` / ``verify``
+- longdoc / verify 由 :mod:`longdoc` / :mod:`verify` 提供真函数
 - LE hooks 尚未接入(Phase 5,见 handoff-skeleton-bootstrap §5.2)
 
 核心职责:
@@ -33,8 +33,10 @@ from .chapters import split_chapters
 from .draft import generate_drafts
 from .frames import extract_keyframes
 from .imagegen import generate_images
+from .longdoc import process_long_doc
 from .ocr import run_ocr
 from .render import render_outputs
+from .verify import verify_pipeline
 
 # ─────────────────────────────────────────────────────────────
 # STAGE_FUNCS — stage 名 → 函数映射(便于 runner 调度 + 测试覆盖)
@@ -86,6 +88,30 @@ def _draft_wrapper(work: Path, config: WorkflowConfig) -> Any:
   return generate_drafts(work, provider, config)
 
 
+def _longdoc_wrapper(work: Path, config: WorkflowConfig) -> Any:
+  """longdoc 阶段的包装:从 config 派生 LLM provider(provider='skip' 时短路)。
+
+  ``config.pipeline.longdoc_llm_provider == "skip"`` → 不创建 provider,传 None;
+  ``process_long_doc`` 内部检测到 ``provider is None`` 时只跑规则清理。
+  """
+  from ..llm import get_provider
+
+  if config.pipeline.longdoc_llm_provider == "skip":
+    return process_long_doc(work, None, config)
+
+  llm_cfg = config.llm
+  provider = get_provider(
+    llm_cfg.provider,
+    model=llm_cfg.model,
+    api_key=llm_cfg.api_key_ref,
+    base_url=llm_cfg.base_url,
+    temperature=llm_cfg.temperature,
+    max_tokens=llm_cfg.max_tokens,
+    timeout_seconds=llm_cfg.timeout_seconds,
+  )
+  return process_long_doc(work, provider, config)
+
+
 STAGE_FUNCS: dict[str, Callable[..., Any]] = {
   "audio": prepare_audio,           # audio(inbox, work, config)
   "asr": transcribe,                # asr(work, config, ...)
@@ -96,8 +122,8 @@ STAGE_FUNCS: dict[str, Callable[..., Any]] = {
   "draft": _draft_wrapper,          # draft(work, config) → 内部调 LLM
   "imagegen": generate_images,      # imagegen(work, config)
   "render": render_outputs,         # render(work, config)
-  "longdoc": _not_implemented_stage,
-  "verify": _not_implemented_stage,
+  "longdoc": _longdoc_wrapper,      # longdoc(work, config) → 内部调 LLM 或 skip
+  "verify": verify_pipeline,        # verify(work, ...)
 }
 
 
@@ -307,6 +333,25 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
         "render stage 需要 drafts 目录;请先跑 draft stage"
       )
     func(ctx.work, ctx.config)
+    return
+
+  if stage == "longdoc":
+    # longdoc 依赖 render 阶段产物 ``<drafts_dir>/<stem>.md``
+    drafts_dir = _resolve_drafts_dir(ctx.work)
+    if drafts_dir is None:
+      raise FileNotFoundError(
+        "longdoc stage 需要 drafts 目录(含 <stem>.md);请先跑 render stage"
+      )
+    func(ctx.work, ctx.config)
+    return
+
+  if stage == "verify":
+    # verify 是最终检查,几乎所有 stage 都已跑过
+    if not (ctx.work / "chapters" / "chapters.json").exists():
+      raise FileNotFoundError(
+        "verify stage 需要 chapters.json;请先跑 chapters stage"
+      )
+    func(ctx.work)
     return
 
   # 占位 stage(目前 _not_implemented_stage)

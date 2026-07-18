@@ -1,6 +1,6 @@
 """media_to_doc 流水线包。
 
-Phase 1 W3 提供 11 stage 中的前 9 个:
+Phase 1 W4 提供完整的 11 stage:
 - :func:`prepare_audio` — ffmpeg 抽音 → work/asr/audio.wav
 - :func:`transcribe` — Faster-Whisper 转写 → work/asr/transcript.jsonl
 - :func:`extract_keyframes` — PySceneDetect + pHash → img/frame_*.jpg + keyframes.json
@@ -10,8 +10,10 @@ Phase 1 W3 提供 11 stage 中的前 9 个:
 - :func:`generate_drafts` — LLM 章节草稿 → raw/<stem>/chapter_NN.md
 - :func:`generate_images` — SDXL Base+Refiner / skip → raw/<stem>/images/gen_*.png
 - :func:`render_outputs` — 拼装 md + html(含 TOC + 内嵌 CSS)→ raw/<stem>.md/.html
+- :func:`process_long_doc` — 长文档深度净化 + 最终 HTML → raw/<stem>_cleaned.md / _final.html
+- :func:`verify_pipeline` — 4 项机器可验证检查 → work/verify/verify.json
 
-由 :mod:`media_to_doc.pipeline.runner` 串起所有 stage(含 W4+ 后续 stage 占位)。
+由 :mod:`media_to_doc.pipeline.runner` 串起所有 stage。
 
 各 stage 函数签名约定:
 - 接受 :class:`pathlib.Path` 输入 + 可选 ``config``
@@ -29,9 +31,11 @@ from . import (
   draft,
   frames,
   imagegen,
+  longdoc,
   ocr,
   render,
   runner,
+  verify,
 )
 from .asr import transcribe
 from .asr_correct import correct_asr
@@ -40,6 +44,7 @@ from .chapters import split_chapters
 from .draft import generate_drafts
 from .frames import KeyFrame, extract_keyframes
 from .imagegen import generate_images
+from .longdoc import process_long_doc, render_final_html
 from .ocr import run_ocr
 from .render import render_html, render_outputs
 from .runner import (
@@ -48,6 +53,7 @@ from .runner import (
   run_pipeline,
   run_stage,
 )
+from .verify import VerifyReport, verify_pipeline
 
 __all__ = [
   "prepare_audio",
@@ -61,6 +67,10 @@ __all__ = [
   "generate_images",
   "render_outputs",
   "render_html",
+  "process_long_doc",
+  "render_final_html",
+  "verify_pipeline",
+  "VerifyReport",
   "run_stage",
   "run_pipeline",
   "STAGE_FUNCS",
@@ -72,7 +82,9 @@ __all__ = [
   "draft",
   "frames",
   "imagegen",
+  "longdoc",
   "ocr",
   "render",
   "runner",
+  "verify",
 ]
