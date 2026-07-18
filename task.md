@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-18(Phase 1 W3 完成)
+最后更新:2026-07-18(Phase 1 W4 完成)
 
 ---
 
@@ -53,8 +53,8 @@
 - [x] **`draft`** — 章节草稿生成(`draft.py`)— **W3**
 - [x] **`imagegen`** — SDXL Base + Refiner,可跳过(`imagegen.py`)— **W3**
 - [x] **`render`** — Markdown + HTML,相对路径(`render.py`)— **W3**
-- [ ] **`longdoc`** — 借鉴 long-doc-processor skill,深度净化 + TOC HTML(`longdoc.py`)— **W4 待办**
-- [ ] **`verify`** — gatekeeper + image_refs 校验(`verify.py`)— **W4 待办**
+- [x] **`longdoc`** — 借鉴 long-doc-processor skill,深度净化 + TOC HTML(`longdoc.py`)— **W4**
+- [x] **`verify`** — gatekeeper + image_refs 校验(`verify.py`)— **W4**
 
 ---
 
@@ -256,3 +256,28 @@
   - B023 closure 问题用显式 `search + append + advance pos` 替代 iterator 闭包
 - 下次会话第一句:承接 `handoff-pipeline-w3-2026-07-18.md`,启动 W4(longdoc + verify)
 
+
+### 会话 8 — Phase 1 W4 longdoc + verify(2026-07-18,~1.5 小时)
+
+- 完成任务(ROADMAP Phase 1 W4 全完成):
+  - 分支:`feat/pipeline-w4-longdoc-verify`(基于 W3)
+  - `src/media_to_doc/pipeline/longdoc.py`:`process_long_doc`(分块 15000 CJK / LLM 净化或 skip 规则清理)+ `render_final_html`(TOC + 锚点 + 内嵌 CSS + print stylesheet + dark mode)
+  - `src/media_to_doc/pipeline/verify.py`:`verify_pipeline`(4 项机器可验证:outputs_exist / chapters_complete / image_refs / html_structure → verify.json)
+  - `src/media_to_doc/pipeline/runner.py`:`_longdoc_wrapper` + STAGE_FUNCS 替换最后 2 占位 + `_invoke_stage` 2 分支 — 11 stage 全部实装
+  - `src/media_to_doc/config.py`:`PipelineConfig.longdoc_llm_provider = "skip"`(默认)
+  - `tests/test_pipeline/test_longdoc.py`(32 用例)+ `tests/test_pipeline/test_verify.py`(27 用例)+ `test_runner.py` 占位 → 0
+  - **pytest:285 → 346 passed (+61 用例)**,3 skip 不变
+  - **ruff:** All checks passed
+  - W4 commit:`feat(pipeline): W4 — longdoc + verify stages (11 stages all live)`(`3b32743`)
+- 关键决策:
+  - longdoc 默认 `provider=None`(skip),规则清理兜底,CI 离线可跑
+  - 用 `longdoc_llm_provider` 字段而非扩展 `LLMConfig.provider` Literal(避免污染 3 真 provider 语义)
+  - 段落边界分块(L1)+ 超长段落字符切(L3 兜底)
+  - image_refs 检查 wiki-link + md 两种语法(覆盖残留 wiki-link 场景)
+  - `_check_chapters_complete` 接受 `chapters_dir` 参数(支持跨 work 调用)
+  - HTML 模板改用 `.format()` 而非 jinja2(避免重复 autoescape 配置)
+  - image 前缀检查只取 basename(跨 stem 重命名鲁棒)
+- 下次会话第一句:承接 `handoff-pipeline-w4-2026-07-18.md`,决定 W5 方向:
+  - A. 跑通示例视频(端到端冒烟)
+  - B. 进入 Phase 2 L2 LE 闭环(迁移 `_research/le_prototype/`)
+  - C. 接入 CLI `mtd run` / `mtd resume`(11 stage 已就位)
