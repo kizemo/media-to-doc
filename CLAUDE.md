@@ -99,7 +99,8 @@ F:\soft\00selfmade\media-to-doc\
 │       ├── cli.py
 │       └── ... 各阶段模块
 ├── tests/                             ← pytest
-├── workspace/                         ← 运行时工作目录
+├── scripts/                           ← 一次性脚本(smoke runner 等)
+├── workspace/                         ← 默认 inbox/work 目录(可由 env 覆盖)
 │   ├── inbox/                         ← 音视频输入
 │   └── work/                          ← 中间产物(可断点续跑)
 └── _research/                         ← 研究/参考资料(不进 git)
@@ -107,6 +108,27 @@ F:\soft\00selfmade\media-to-doc\
 ```
 
 `_research/` 目录**不进 git**,只在项目启动/调研阶段保留;当代码落地后可以归档或删除。
+
+### 4.1 输出目录约定(W5+ 用户确认,2026-07-18)
+
+流水线产物默认输出到 **视频所在目录的 `output` 子目录**(与视频同盘,便于整盘
+复制 / 上传 / 知识库归档)。**这是项目级约定**,所有调用入口
+(`scripts/run_smoke.py`、未来的 `mtd run` / `mtd resume`、MCP server)默认都遵循。
+
+- `inbox_dir = <video>.parent`(放视频的目录)
+- `work_dir  = <video>.parent / "output"`(同目录的 `output` 子目录)
+- 默认入口:`uv run python scripts/run_smoke.py <video.mp4>`
+- 自定义 work_dir:`--work-dir D:/anywhere`(支持任意路径,常用于 CI 或共享盘)
+- **已有产物保护**:跑前确认 `output/` 无冲突;若有旧产物,先备份到
+  `output-backup-YYYY-MM-DD/`(参见 W5 端到端冒烟会话
+  `handoff-pipeline-w5-smoke-2026-07-18.md`)
+
+为什么这样设计:
+
+- **可分发**:讲义和原视频同盘,整盘复制 / 网盘上传 / 知识库归档时路径不会断裂
+- **相对路径**:render 产物用 `images/<file>` 等相对路径,跨机器鲁棒
+- **零全局污染**:不在 `~/Documents` / 全局 `workspace/` 等散落产物
+- **可覆盖**:`--work-dir` 满足 CI / 多输出场景
 
 ---
 
