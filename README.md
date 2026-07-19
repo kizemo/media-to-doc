@@ -102,7 +102,7 @@ print(f"Stages: {result.quality['completed']}/{result.quality['total_stages']}")
 ### 3. MCP Server(Claude Desktop / Codex)
 
 ```json
-// ~/.config/claude_desktop_config.json(Linux/Mac)
+// ~/Library/Application Support/Claude/claude_desktop_config.json(macOS)
 // %APPDATA%\Claude\claude_desktop_config.json(Windows)
 {
   "mcpServers": {
@@ -115,6 +115,8 @@ print(f"Stages: {result.quality['completed']}/{result.quality['total_stages']}")
 ```
 
 可用工具:`list_courses` / `run_pipeline` / `resume_pipeline` / `check_status` / `list_outputs` / `read_lecture`
+
+完整用法见 **[docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md)**。
 
 ---
 
@@ -152,7 +154,7 @@ work/<课程>/                        ← 中间产物(可断点续跑)
 | [CLAUDE.md](CLAUDE.md) | Claude 协作规则(项目级指引) |
 | [task.md](task.md) | 活跃 todo |
 | `docs/installation.md` | 用户:各 OS 安装步骤(v1.0 后) |
-| `docs/mcp-integration.md` | 用户:Claude Desktop 集成(v1.0 后) |
+| [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md) | 用户:Claude Desktop 集成 ✅ 当前可用 |
 
 ---
 
@@ -160,13 +162,13 @@ work/<课程>/                        ← 中间产物(可断点续跑)
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| **Phase 0** | 项目骨架 + uv init + 首 commit | ✅ 当前 |
-| **Phase 1** | 11 阶段核心流水线 | ⏳ W1-W4 |
-| **Phase 2** | Tauri 客户端 UI | ⏳ W5-W8 |
-| **Phase 3** | NSIS 安装器 + 配置向导 | ⏳ W6-W7 |
-| **Phase 4** | MCP server + 集成文档 | ⏳ W7 |
-| **Phase 5** | Loop Engineering 闭环 | ⏳ W7.5-W8 |
-| **Phase 6** | v1.0 发布(5 渠道全发) | ⏳ W8 |
+| **Phase 0** | 项目骨架 + uv init + 首 commit | ✅ 完成 |
+| **Phase 1** | 11 阶段核心流水线 | ✅ W1-W4 完成 |
+| **Phase 2** | Loop Engineering 闭环 | ⏳ L1+L2 待启动 |
+| **Phase 3** | LLM provider 抽象(ollama/anthropic/openai_compat) | ✅ W2 完成 |
+| **Phase 4** | 跨项目可调用:CLI + MCP server + Python API | ⏳ W6-W7(W7 ✅) |
+| **Phase 5** | 端到端冒烟跑通 | ✅ W5 完成 |
+| **Phase 6** | v1.0 发布(5 渠道全发) | ⏳ W8+ |
 
 完整规划见 [ROADMAP.md](ROADMAP.md)。
 

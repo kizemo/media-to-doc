@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-19(Phase 1 W5 完成 — 端到端冒烟跑通;W6 CLI 实装)
+最后更新:2026-07-19(Phase 1 W5 完成;W6 CLI 实装;W7 MCP server 完成)
 
 ---
 
@@ -72,15 +72,16 @@
 - [ ] `__init__.py` 顶层 re-export + lazy import(PEP 562),重依赖按需加载
 - [x] `cli.py` `media-to-doc run <inbox>` / `media-to-doc resume <work>` 命令 — **W6 完成**
 - [ ] `pyproject.toml` `[project.scripts]` 注册 CLI 入口(已注册 `mtd`,验证 OK)
-- [ ] `mcp_server.py` stdio MCP server,6 个工具:
-  - [ ] `list_courses(workspace_root)`
-  - [ ] `run_pipeline(inbox_dir, workspace_root)`
-  - [ ] `resume_pipeline(work_dir)`
-  - [ ] `check_status(work_dir)`
-  - [ ] `list_outputs(inbox_dir)`
-  - [ ] `read_lecture(inbox_dir, version, fmt)` — 支持 `raw/cleaned/final`
-- [ ] Claude Desktop 配置文档
+- [x] `mcp_server.py` stdio MCP server,6 个工具 — **W7 完成**:
+  - [x] `list_courses(workspace_root)`
+  - [x] `run_pipeline(inbox_dir, workspace_root, llm, imagegen, longdoc_llm, no_longdoc, force, stop_after)`
+  - [x] `resume_pipeline(work_dir, inbox_dir, force, stop_after)`
+  - [x] `check_status(work_dir)`
+  - [x] `list_outputs(inbox_dir)`
+  - [x] `read_lecture(inbox_dir, version, fmt)` — 支持 `raw/cleaned/final`
+- [x] Claude Desktop 配置文档 — `docs/MCP_INTEGRATION.md` (**W7**)
 - [x] `cli.py` `mtd status` / `mtd list` 命令 — **W6 完成**
+- [x] `cli.py` `mtd mcp` 子命令(启动 MCP server)— **W7 完成**
 
 ---
 
@@ -361,4 +362,39 @@
   - **eprint 走 stdout**:Typer 0.12+ CliRunner 不支持 mix_stderr,让 eprint 走 stdout 便于测试 + MCP + 管道一致捕获
 - W6 commit:`feat(cli): W6 — mtd run/resume/status/list with inbox isolation + JSON output`
 - 下次会话第一句:承接 `handoff-pipeline-w6-cli-2026-07-19.md`,启动 W7(MCP server 或 LE 闭环):
-- **推荐排序**:C → D → B(W6=C CLI,W7=D MCP,W8=B LE)
+- **推荐排序**:C → D → B(W6=C CLI ✅,W7=D MCP ✅,W8=B LE 待启动)
+
+### 会话 12 — Phase 4 W7 MCP server(2026-07-19,~2h)
+
+- 完成任务(ROADMAP Phase 4 W7 全完成):
+  - 分支:`feat/pipeline-w7-mcp`(基于 W6 `23c1f96`)
+  - `src/media_to_doc/mcp_server.py`(479 行):6 工具纯函数 + Server 单例 + handler 包装 try/except
+  - `src/media_to_doc/cli.py`:`mtd mcp` 子命令实装(W7 占位 → 调 `mcp_server.main()`)
+  - `tests/test_mcp_server.py`(30 用例):覆盖 6 工具纯函数 + 协议层 + 错误路径
+  - `docs/MCP_INTEGRATION.md`:Claude Desktop 配置 + 6 工具签名 + 错误处理 + 调试
+  - `README.md` + `CLAUDE.md` §9.4:同步 MCP 配置 + 6 工具清单
+  - `task.md` Phase 4 全部 [x]
+  - 测试:**400 passed / 3 skipped**(W6 370 + W7 30 MCP 用例)
+  - ruff:**All checks passed**
+  - W7 commit:`feat(cli): W7 — mcp_server.py + mtd mcp + 6 工具`
+- 关键设计:
+  - handler 同步 + 全部日志走 stderr(stdout 留给 JSON-RPC,参考实现 c80abaf)
+  - 6 工具纯函数 + `handle_call_tool` 统一包装 try/except → `isError=True` TextContent
+  - read-only 工具带 `ToolAnnotations(readOnlyHint=True)`(MCP 客户端可显示提示)
+  - `tool_run_pipeline` 复用 cli 的 inbox 自动隔离 + 多视频场景处理
+  - `tool_list_outputs` 用 `Path.parts[0] == "images"` 分类(Windows 路径分隔符兼容)
+- 撞墙 / 修正:
+  - `.srt` 不在 `SUPPORTED_EXTS` → 测试改用 `.mkv`
+  - `rel.startswith("images/")` Windows 失败 → 改用 `Path.parts` 检查
+  - `inbox` 空目录应抛错(原代码吞错) → `find_media` 直接抛 `FileNotFoundError`
+  - ruff F401:`InitializationOptions` / `INBOX_DIR` / `contextlib` 未使用 → 删 import
+- 技术债(给 W8+):
+  - `read_lecture` 一次性读全文:大讲义(>1MB)可撑爆上下文,后续可加分页
+  - `run_pipeline` 同步阻塞:长任务会卡住 MCP session,建议 `stop_after="chapters"` 先看 LLM 质量
+  - `tool_run_pipeline` 在 transport 断开时不会自动停,后续可加 cancellation token
+  - Claude Desktop 配置需要用户手改路径,F8+ 可加 `mtd init` 命令写默认配置
+- 下次会话第一句:承接 `handoff-pipeline-w7-mcp-2026-07-19.md`,启动 W8(LE 闭环 + Phase 5 测试巩固):
+  - **W8 候选**:
+    - **A. Phase 6 L2 LE 闭环**(迁移 `_research/le_prototype/` 到 `src/media_to_doc/logger/`)+ 接到 11 真 stage
+    - **B. Python API 顶层 re-export** + lazy import(PEP 562)— 让其它项目 `from media_to_doc import run_pipeline` 直接用
+    - **C. 测试巩固**:Phase 5(目标 110+ 用例已超额完成,可选优化覆盖率)

@@ -260,6 +260,8 @@ from media_to_doc import (
 
 ### 9.4 MCP server 配置(Claude Desktop)
 
+**W7 已实装**(6 工具 + stdio JSON-RPC + Claude Desktop 集成文档):
+
 ```json
 {
   "mcpServers": {
@@ -270,6 +272,11 @@ from media_to_doc import (
   }
 }
 ```
+
+完整用法、6 工具签名、错误处理、调试技巧见 [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md)。
+
+工具清单:`list_courses` / `run_pipeline` / `resume_pipeline` /
+`check_status` / `list_outputs` / `read_lecture`(后 4 个只读,可安全调用)。
 
 ---
 

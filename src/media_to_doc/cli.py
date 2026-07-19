@@ -662,9 +662,18 @@ def model(
 
 @app.command()
 def mcp() -> None:
-  """启动 MCP server(stdio JSON-RPC,供 Claude Desktop / Codex 调用)。"""
-  console.print("[yellow]⚠[/yellow] mtd mcp 尚未实装(W7)。")
-  raise typer.Exit(code=1)
+  """启动 MCP server(stdio JSON-RPC,供 Claude Desktop / Codex 调用)。
+
+  启动后 server 从 stdin 读 JSON-RPC 帧、往 stdout 写响应。
+  所有日志走 stderr 不污染 stdout。Claude Desktop 配 ``mtd-mcp`` 即可。
+  """
+  from . import mcp_server
+
+  try:
+    mcp_server.main()
+  except KeyboardInterrupt:
+    # Claude Desktop 关闭连接时 Ctrl-C → 静默退出
+    raise typer.Exit(code=0) from None
 
 
 # ─────────────────────────────────────────────────────────────
