@@ -45,9 +45,10 @@ def _seed_chapters(work: Path, video: str = "course-x") -> None:
 
 
 def _seed_rendered_md(work: Path, stem: str, body: str) -> Path:
-  drafts_dir = work / "chapters" / "raw" / stem
-  drafts_dir.mkdir(parents=True, exist_ok=True)
-  md_path = drafts_dir / f"{stem}.md"
+  """模拟 render 阶段的输出位置:``<work>/chapters/raw/<stem>.md``(与 render 一致)。"""
+  raw_dir = work / "chapters" / "raw"
+  raw_dir.mkdir(parents=True, exist_ok=True)
+  md_path = raw_dir / f"{stem}.md"
   md_path.write_text(body, encoding="utf-8")
   return md_path
 

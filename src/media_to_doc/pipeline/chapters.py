@@ -118,8 +118,13 @@ class ChaptersReport:
 # ─────────────────────────────────────────────────────────────
 
 
-def _load_transcript(work: Path) -> str:
-  """把 transcript.jsonl 拼成 ``[start-ends] text`` 列表(限制总长)。"""
+def _load_transcript(work: Path, max_chars: int = 30000) -> str:
+  """把 transcript.jsonl 拼成 ``[start-ends] text`` 列表(限制总长)。
+
+  默认截断到 ``max_chars`` 字符(约 15k tokens),留余量给 system prompt
+  + response;过长 transcript 配合 system prompt 会超出 qwen3:14b 32k 上下文。
+  截断后追加 ``[truncated, N more segments not shown]`` 提示。
+  """
   from .asr import read_transcript_jsonl
 
   transcript_path = work / "asr" / "transcript.jsonl"
@@ -129,10 +134,18 @@ def _load_transcript(work: Path) -> str:
     )
   segments = read_transcript_jsonl(transcript_path)
   lines: list[str] = []
+  total = 0
+  truncated = False
   for seg in segments:
-    lines.append(
-      f"[{seg.start:7.2f}s - {seg.end:7.2f}s] {seg.text}"
-    )
+    line = f"[{seg.start:7.2f}s - {seg.end:7.2f}s] {seg.text}"
+    if total + len(line) + 1 > max_chars:
+      truncated = True
+      break
+    lines.append(line)
+    total += len(line) + 1
+  if truncated:
+    remaining = len(segments) - len(lines)
+    lines.append(f"\n[truncated, {remaining} more segments not shown]")
   return "\n".join(lines)
 
 

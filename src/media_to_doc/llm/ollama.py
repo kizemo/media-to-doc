@@ -58,6 +58,7 @@ class OllamaProvider(BaseLLMProvider):
     max_tokens: int = 4096,
     timeout_seconds: int = 600,
     base_url: str | None = None,
+    num_ctx: int | None = None,
   ) -> None:
     super().__init__(
       model=model or DEFAULT_MODEL,
@@ -66,6 +67,7 @@ class OllamaProvider(BaseLLMProvider):
       timeout_seconds=timeout_seconds,
     )
     self._base_url = base_url or os.environ.get("OLLAMA_HOST") or DEFAULT_BASE_URL
+    self._num_ctx = num_ctx  # None → Ollama 默认(常 4096);显式给大值可扩到 32k/128k
     self._client: object | None = None  # lazy init
 
   @property
@@ -102,13 +104,16 @@ class OllamaProvider(BaseLLMProvider):
     timeout_seconds: int,
   ) -> str:
     client = self._ensure_client()
+    options: dict[str, object] = {
+      "temperature": temperature,
+      "num_predict": max_tokens,
+    }
+    if self._num_ctx is not None:
+      options["num_ctx"] = self._num_ctx
     response = client.chat(  # type: ignore[attr-defined]
       model=model or self.model or DEFAULT_MODEL,
       messages=[{"role": "user", "content": prompt}],
-      options={
-        "temperature": temperature,
-        "num_predict": max_tokens,
-      },
+      options=options,
     )
     # SDK 0.3+ 返回 ChatResponse; message.content 是文本
     message = getattr(response, "message", None)

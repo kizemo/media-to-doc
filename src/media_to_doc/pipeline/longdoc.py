@@ -521,7 +521,7 @@ def process_long_doc(
   _ = config
   # 1. 定位源文件
   if source_md is None:
-    # 默认: ``<work>/chapters/raw/<video_stem>/<stem>.md``(与 render 一致)
+    # 默认: ``<work>/chapters/raw/<video_stem>.md``(与 render 一致)
     chapters_dir = work / "chapters"
     if (chapters_dir / "chapters.json").exists():
       chapters_json = json.loads(
@@ -530,7 +530,7 @@ def process_long_doc(
       video = (chapters_json.get("video") or "").strip() or "output"
     else:
       video = "output"
-    source_md = chapters_dir / "raw" / video / f"{video}.md"
+    source_md = chapters_dir / "raw" / f"{video}.md"
   if not source_md.exists():
     raise FileNotFoundError(
       f"找不到源 markdown {source_md};请先跑 render stage"
@@ -579,7 +579,10 @@ def process_long_doc(
   # 4. 渲染最终 HTML
   final_path: Path | None = None
   if write_html:
-    final_path = render_final_html(cleaned_md=cleaned_path, html_path=None)
+    final_path = render_final_html(
+      cleaned_md=cleaned_path,
+      html_path=output_dir / f"{output_stem}{_FINAL_SUFFIX}",
+    )
   else:
     final_path = output_dir / f"{output_stem}{_FINAL_SUFFIX}"
 

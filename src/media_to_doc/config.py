@@ -38,6 +38,9 @@ class LLMConfig:
   temperature: float = 0.3
   max_tokens: int = 4096
   timeout_seconds: int = 600
+  # Ollama 上下文窗口大小(默认 65536,长 transcript 调 LLM 够用);
+  # 设 ``None`` 用 Ollama 默认(常 4096,可能不够);最大 131072
+  num_ctx: int | None = 65536
 
   # 加密 API key 存储路径(Windows DPAPI,Phase 2 实装)
   api_key_ref: str | None = None

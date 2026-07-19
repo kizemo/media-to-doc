@@ -151,13 +151,23 @@ def _load_chapters_report(path: Path) -> ChaptersReport:
 
 
 def _resolve_drafts_dir(work: Path) -> Path | None:
-  """``<work>/chapters/raw/<video_stem>`` 派生(读 chapters.json 的 video)。"""
+  """``<work>/chapters/raw/<video_stem>`` 派生(读 chapters.json 的 video)。
+
+  render 阶段把 ``<stem>.md`` / ``<stem>_cleaned.md`` / ``<stem>_final.html``
+  写到 ``<work>/chapters/raw/`` 下(``output_dir=drafts_dir.parent``),
+  所以这里返回 ``raw`` 目录而不是 ``raw/<stem>`` 子目录。
+  """
   chapters_json = work / "chapters" / "chapters.json"
   if not chapters_json.exists():
     return None
   data = json.loads(chapters_json.read_text(encoding="utf-8"))
   stem = (data.get("video") or "").strip() or "output"
   candidate = work / "chapters" / "raw" / stem
+  if candidate.exists():
+    return candidate  # 兼容旧布局
+  raw_dir = work / "chapters" / "raw"
+  if (raw_dir / f"{stem}.md").exists():
+    return raw_dir  # render 新布局:rendered md 在 raw/<stem>.md
   return candidate if candidate.exists() else None
 
 
@@ -170,7 +180,12 @@ def _check_outputs_exist(
   drafts_dir: Path | None,
   stem: str,
 ) -> CheckResult:
-  """校验 ``<stem>.md`` / ``<stem>_cleaned.md`` / ``<stem>_final.html`` 都存在。"""
+  """校验 ``<stem>.md`` / ``<stem>_cleaned.md`` / ``<stem>_final.html`` 都存在。
+
+  兼容新旧两种布局:
+  - 新(默认,render W3):``<drafts_dir>/../<stem>.md``
+  - 旧(W4 长文档遗留):``<drafts_dir>/<stem>.md``
+  """
   result = CheckResult(
     name="outputs_exist",
     passed=True,
@@ -181,12 +196,22 @@ def _check_outputs_exist(
     result.failures.append("drafts_dir 不存在(无法定位 render / longdoc 产物)")
     return result
 
-  expected = [
-    (drafts_dir / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),
-    (drafts_dir / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),
-    (drafts_dir / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),
-  ]
-  for path, label in expected:
+  # 新布局优先(drafts_dir 是 raw/<stem>,rendered md 在 raw/<stem>.md)
+  new_layout = drafts_dir.parent / f"{stem}.md"
+  candidates: list[tuple[Path, str]] = []
+  if new_layout.exists():
+    candidates.extend([
+      (drafts_dir.parent / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),
+      (drafts_dir.parent / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),
+      (drafts_dir.parent / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),
+    ])
+  else:
+    candidates.extend([
+      (drafts_dir / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),
+      (drafts_dir / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),
+      (drafts_dir / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),
+    ])
+  for path, label in candidates:
     if not path.exists():
       result.passed = False
       result.failures.append(f"缺少 {label}:{path}")
@@ -429,9 +454,17 @@ def verify_pipeline(
   cleaned_md = (
     drafts_dir / f"{output_stem}{_CLEANED_MD_SUFFIX}" if drafts_dir else None
   )
-  final_html = (
-    drafts_dir / f"{output_stem}{_FINAL_HTML_SUFFIX}" if drafts_dir else None
-  )
+  # HTML 兼容新旧布局(新:layout 是 raw/<stem>,最终 HTML 在 raw/<stem>_final.html)
+  final_html: Path | None = None
+  if drafts_dir is not None:
+    candidate_new = drafts_dir.parent / f"{output_stem}{_FINAL_HTML_SUFFIX}"
+    candidate_old = drafts_dir / f"{output_stem}{_FINAL_HTML_SUFFIX}"
+    if candidate_new.exists():
+      final_html = candidate_new
+    elif candidate_old.exists():
+      final_html = candidate_old
+    else:
+      final_html = candidate_new  # 默认检查新路径
 
   # 视频名(chapters.json 派生)
   video = ""

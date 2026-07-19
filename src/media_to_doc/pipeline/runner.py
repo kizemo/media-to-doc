@@ -67,6 +67,7 @@ def _chapters_wrapper(work: Path, config: WorkflowConfig) -> Any:
     temperature=llm_cfg.temperature,
     max_tokens=llm_cfg.max_tokens,
     timeout_seconds=llm_cfg.timeout_seconds,
+    num_ctx=llm_cfg.num_ctx,
   )
   return split_chapters(work, provider, config)
 
@@ -84,6 +85,7 @@ def _draft_wrapper(work: Path, config: WorkflowConfig) -> Any:
     temperature=llm_cfg.temperature,
     max_tokens=llm_cfg.max_tokens,
     timeout_seconds=llm_cfg.timeout_seconds,
+    num_ctx=llm_cfg.num_ctx,
   )
   return generate_drafts(work, provider, config)
 
@@ -273,7 +275,10 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
       raise FileNotFoundError(
         f"ocr stage 需要关键帧目录 {img_dir} 非空;请先跑 frames stage"
       )
-    func(img_dir, ctx.config)
+    # OCR 输出统一写到 work/ocr/ — asr_correct 默认从这里读
+    output_dir = ctx.work / "ocr"
+    manifest_path = output_dir / "ocr_results.json"
+    func(img_dir, ctx.config, output_dir=output_dir, manifest_path=manifest_path)
     return
 
   if stage == "asr_correct":
@@ -282,7 +287,7 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
       raise FileNotFoundError(
         "asr_correct stage 需要 transcript.jsonl;请先跑 asr stage"
       )
-    func(ctx.work, ctx.config)
+    func(ctx.work, ctx.config, ocr_dir=ctx.work / "ocr")
     return
 
   if stage == "chapters":

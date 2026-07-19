@@ -63,6 +63,7 @@ def get_provider(
   max_tokens: int = 4096,
   timeout_seconds: int = 600,
   preset: str | None = None,
+  num_ctx: int | None = None,
 ) -> BaseLLMProvider:
   """工厂:按名创建 provider 实例。
 
@@ -79,6 +80,9 @@ def get_provider(
   preset : str | None
     ``openai_compatible`` 专用:内置厂商名(MiniMax / deepseek / zhipu /
     moonshot / openrouter / dashscope / hunyuan),传 preset 时自动填 base_url
+  num_ctx : int | None
+    Ollama 上下文窗口大小(``None`` 用 Ollama 默认);长 transcript 调 LLM
+    时建议显式设 32768 / 65536 / 131072 避免 "exceeds context size" 错误
 
   Returns
   -------
@@ -106,6 +110,8 @@ def get_provider(
     kwargs["api_key"] = api_key
     if base_url is not None:
       kwargs["base_url"] = base_url
+  elif name == "ollama":
+    kwargs["num_ctx"] = num_ctx
   return cls(**kwargs)  # type: ignore[arg-type]
 
 
