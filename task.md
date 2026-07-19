@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-19(Phase 1 W5 完成;W6 CLI 实装;W7 MCP server 完成)
+最后更新:2026-07-19(Phase 1 W5 完成;W6 CLI 实装;W7 MCP server 完成;**W8 LE 闭环完成**)
 
 ---
 
@@ -99,16 +99,16 @@
 > **前置研究**:本会话已落地 23 测试全过的原型,见 `_research/le_prototype/`
 > 详细设计见 `_research/LE_DESIGN.md`
 
-- [ ] **迁移 LE 原型**
-  - [ ] 复制 `_research/le_prototype/{pipeline_logger,gatekeeper,learnings}.py` 到 `src/media_to_doc/logger/`
-  - [ ] 引入包内依赖(`paths.py` / `config.py`)
-- [ ] **替换 mock stage 为真实 11 stage 函数**(每个 stage 接到 `timed_stage(logger, stage)` 上下文管理器)
-- [ ] **`pipeline/runner.py` 集成 LE hooks**(`run_pipeline` 末尾调 `gatekeeper_check` + `logger.finalize` + `post_pipeline_hook`)
-- [ ] **`llm/health.py` + MCP 暴露**(`get_run_metrics(work_dir)` + `list_runs(workspace_root)`)
-- [ ] **UI:Learnings 页**(读 `.learnings/` 显示)
-- [ ] **端到端验证**(跑 3 次示例视频,演示 Pattern-Key 自动晋升)
-- [ ] 测试:`test_logger/*` 30+ 用例
-- [ ] commit:`feat(pipeline): wire Loop Engineering L1+L2`
+- [x] **迁移 LE 原型** — **W8 完成** (`2eb4591`)
+  - [x] 复制 `_research/le_prototype/{pipeline_logger,gatekeeper,learnings}.py` 到 `src/media_to_doc/logger/`
+  - [x] 引入包内依赖(`paths.py` / `config.py` / `LEARNINGS_DIR` / `project_root()`)
+- [x] **替换 mock stage 为真实 11 stage 函数**(每个 stage 接到 `timed_stage(logger, stage)` 上下文管理器)— **W8**
+- [x] **`pipeline/runner.py` 集成 LE hooks**(`run_pipeline` 末尾调 `gatekeeper_check` + `logger.finalize` + `post_pipeline_hook`,finally 块保证)— **W8**
+- [x] **`llm/health.py` + MCP 暴露**(`get_run_metrics(work_dir)` + `list_runs(workspace_root)` + `get_escalated_errors` + 2 MCP 工具)— **W8**
+- [ ] **UI:Learnings 页**(读 `.learnings/` 显示)— Phase 2 UI 任务
+- [ ] **端到端验证**(跑 3 次示例视频,演示 Pattern-Key 自动晋升)— W9+ 真实跑
+- [x] 测试:`test_logger/*` 61 用例 + `test_llm/test_health.py` 15 用例 + MCP 6 新增 — **W8**
+- [x] commit:`feat(pipeline): W8 — wire Loop Engineering L1+L2 to runner + 8 tools`(`2eb4591`)
 
 ---
 
@@ -398,3 +398,56 @@
     - **A. Phase 6 L2 LE 闭环**(迁移 `_research/le_prototype/` 到 `src/media_to_doc/logger/`)+ 接到 11 真 stage
     - **B. Python API 顶层 re-export** + lazy import(PEP 562)— 让其它项目 `from media_to_doc import run_pipeline` 直接用
     - **C. 测试巩固**:Phase 5(目标 110+ 用例已超额完成,可选优化覆盖率)
+
+### 会话 13 — Phase 6 W8 LE 闭环(2026-07-19,~2.5h)
+
+- 完成任务(ROADMAP Phase 6 全完成):
+  - 分支:`feat/pipeline-w8-le`(基于 W7 `3222328`)
+  - **迁移 LE 原型 3 模块** → `src/media_to_doc/logger/{pipeline_logger,gatekeeper,learnings}.py`
+    - 适配新产物布局:`<work>/chapters/raw/<stem>.md`(原:`inbox/raw/lecture.md`)
+    - `gatekeeper_check(work)` 单参数(W8 简化,不再传 inbox)
+  - **`pipeline/runner.py` 接 LE 闭环**:
+    - `run_stage(stage, ctx, state, logger=None)`:`timed_stage(logger, stage)` 替换裸 try/except
+    - `run_pipeline` 末尾 try/finally 块:`gatekeeper_check(work)` → `logger.finalize()` → `post_pipeline_hook(work)`
+    - `PipelineResult.pipeline_run: PipelineRun | None`(新字段)
+    - 状态异常时 logger 仍写盘(state=调度真相,run.json=LE 沉淀 双轨并存)
+  - **`llm/health.py` 新增**:`get_run_metrics` / `list_runs` / `get_escalated_errors`
+  - **MCP 8 工具**(W7=6 + W8=2):`get_run_metrics` / `list_runs` 都标 `readOnlyHint=True`
+  - **测试 482 passed**(+82,W7 400 → W8 482):
+    - `tests/test_logger/test_pipeline_logger.py`:28 用例
+    - `tests/test_logger/test_gatekeeper.py`:15 用例
+    - `tests/test_logger/test_learnings.py`:18 用例
+    - `tests/test_llm/test_health.py`:15 用例
+    - `tests/test_mcp_server.py` 加 W8:6 用例
+  - ruff:**All checks passed**
+  - W8 commit:`feat(pipeline): W8 — wire Loop Engineering L1+L2 to runner + 8 tools`(`2eb4591`)
+- 关键设计:
+  - **gatekeeper.py 候选路径 3 重试**(适配 W3 render 默认布局 `images/` 子目录 + wiki-link 简写):
+    ```python
+    candidates = [
+        lecture_dir / ref,                # 原路径
+        lecture_dir / basename,           # 同目录
+        lecture_dir / "images" / basename,  # images 子目录
+    ]
+    ```
+  - **assess_llm_health total_runs 只计成功解析的 run_file**(修正原型把损坏文件也计入的 bug)
+  - **PipelineResult.pipeline_run 可选字段**(失败时 None,不影响 W4-W7 既有断言)
+  - **mcp_server.log 全部走 stderr** + INSTRUCTIONS 字符串列出 8 工具
+- 撞墙 / 修正:
+  - `test_stage_record_to_dict` — StageRecord 无 to_dict,改用 `dataclasses.asdict`
+  - `test_write_error_truncates_traceback` — message 太长被原样保留,改断言总长度 < 3500
+  - gatekeeper image_refs 检查只取 basename → 改成 3 候选路径(md-link / wiki-link 都支持)
+  - `assess_llm_health` 把损坏 run_file 也计入 total_runs → 引入 `parsed_runs` 单独计数
+  - `_project_root` vs `project_root` 名字混淆 → monkeypatch `media_to_doc.paths.project_root`
+  - health.py work_root 不存在时早返回无 `llm_health_global` 字段 → 补全空字典
+  - ruff F821 `GatekeeperResult` 引用 → 从函数内 import 移到模块顶部
+- 技术债(给 W9+):
+  - `llm_health={}` 暂时为空,无法自动聚合跨 stage 的 LLM 调用统计 — 需要改 `_chapters_wrapper` 等接 ctx.metrics 注入 provider reference
+  - `assess_llm_health.recommendation` 严格 > 0.10 触发 reduce_chunk,0.1 边界不算(测试已覆盖)
+  - `gatekeeper_check` 假设产物全部存在,W9 端到端跑需要确认 11 stage 真实产物格式
+  - 真实端到端 LE 验证(跑 3 次示例视频)未做,留到 W9+ 或后续真实场景
+- 下次会话第一句:承接 `handoff-le-wiring-2026-07-19.md`,启动 W9 候选:
+  - **A. Phase 7 文档与示例**(README 完善 + .learnings/ 首批 LP 条目 + 跨项目 demo)
+  - **B. Python API 顶层 re-export**(让其它项目 `from media_to_doc import run_pipeline` 直接用)
+  - **C. 端到端 LE 验证**(跑 3 次示例视频演示 Pattern-Key 自动晋升)
+  - **D. 修 llm_health 自动聚合**(改 `_chapters_wrapper` 接 ctx.metrics)
