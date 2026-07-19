@@ -1,4 +1,4 @@
-"""LE L2 审核层 — Gatekeeper(W8 落地)。
+"""LE L2 审核层 — Gatekeeper(W8 落地,W11-A 布局对齐)。
 
 实现关键节点的机器可验证检查。
 参考 ``_research/LE_DESIGN.md`` §3.2。
@@ -6,7 +6,11 @@
 核心原则:停止条件 = 机器可验证命令,绝不"感觉差不多"。
 
 W8 适配:产物布局从原型 ``inbox/raw/lecture.md`` 迁移到
-``<work>/chapters/raw/<stem>.md`` + ``<work>/output_final.html``(W3 render 后)。
+``<work>/chapters/raw/<stem>.md`` + ``<work>/chapters/raw/<stem>_final.html``(W3 render + W4 longdoc)。
+
+W11-A 适配:gatekeeper 与 verify 共享布局约定,避免分叉。
+- 新布局(W3+,默认):``<work>/chapters/raw/<stem>.md`` + ``<work>/chapters/raw/<stem>_final.html``
+- 旧布局(W4 原型):``<work>/chapters/raw/<stem>/<stem>.md`` + ``<work>/output_final.html``
 
 接口对比:
 - 原型:``gatekeeper_check(inbox, work)`` — 两参数,产物在 inbox 内
@@ -23,7 +27,24 @@ from .pipeline_logger import GatekeeperResult
 
 
 def _resolve_lecture_path(work: Path) -> Path | None:
-  """从 ``<work>/chapters/chapters.json`` 派生 ``<work>/chapters/raw/<stem>.md``。"""
+  """派生 lecture markdown 路径,兼容新旧两种产物布局。
+
+  优先级(返回第一个存在的路径,否则返回新布局路径用于诊断):
+
+  1. 新布局(W3+):``<work>/chapters/raw/<stem>.md``
+  2. 旧布局(W4 原型):``<work>/chapters/raw/<stem>/<stem>.md``
+
+  Parameters
+  ----------
+  work : Path
+    work 根目录
+
+  Returns
+  -------
+  Path | None
+    第一个存在的候选路径;若都没有,返回新布局路径(便于诊断);
+    若 ``chapters.json`` 不存在则返回 ``None``。
+  """
   chapters_json = work / "chapters" / "chapters.json"
   if not chapters_json.exists():
     return None
@@ -32,12 +53,66 @@ def _resolve_lecture_path(work: Path) -> Path | None:
   except (json.JSONDecodeError, OSError):
     return None
   stem = (data.get("video") or "").strip() or "output"
-  return work / "chapters" / "raw" / stem / f"{stem}.md"
+
+  new_layout = work / "chapters" / "raw" / f"{stem}.md"
+  if new_layout.exists():
+    return new_layout
+  old_layout = work / "chapters" / "raw" / stem / f"{stem}.md"
+  if old_layout.exists():
+    return old_layout
+  # 没有文件存在:返回新布局路径(便于 gatekeeper_check 报"lecture.md not found")
+  return new_layout
 
 
 def _resolve_final_html(work: Path) -> Path:
-  """最终 HTML 路径(``<work>/output_final.html``)。"""
-  return work / "output_final.html"
+  """派生最终 HTML 路径,兼容新旧两种产物布局。
+
+  优先级(返回第一个存在的路径,否则返回默认诊断路径):
+
+  1. 新布局(W4+):``<work>/chapters/raw/<stem>_final.html``
+  2. 旧布局(W4 原型):``<work>/output_final.html``
+
+  若 ``chapters.json`` 不存在,默认 fallback 为旧布局(向后兼容)。
+
+  Parameters
+  ----------
+  work : Path
+    work 根目录
+
+  Returns
+  -------
+  Path
+    第一个存在的候选路径;都没有则返回诊断用默认路径。
+  """
+  chapters_json = work / "chapters" / "chapters.json"
+  stem = "output"
+  if chapters_json.exists():
+    try:
+      data = json.loads(chapters_json.read_text(encoding="utf-8"))
+      stem = (data.get("video") or "").strip() or "output"
+    except (json.JSONDecodeError, OSError):
+      stem = "output"
+
+  new_layout = work / "chapters" / "raw" / f"{stem}_final.html"
+  if new_layout.exists():
+    return new_layout
+  old_layout = work / "output_final.html"
+  if old_layout.exists():
+    return old_layout
+  # 没有文件存在:返回诊断默认路径(优先用 chapters.json 推断的 stem)
+  return new_layout if chapters_json.exists() else old_layout
+
+
+def _read_video_stem(work: Path) -> str:
+  """从 ``chapters.json`` 派生 video stem;解析失败时回退 ``"output"``。"""
+  chapters_json = work / "chapters" / "chapters.json"
+  if not chapters_json.exists():
+    return "output"
+  try:
+    data = json.loads(chapters_json.read_text(encoding="utf-8"))
+  except (json.JSONDecodeError, OSError):
+    return "output"
+  return (data.get("video") or "").strip() or "output"
 
 
 def gatekeeper_check(work: Path) -> GatekeeperResult:
@@ -104,15 +179,21 @@ def gatekeeper_check(work: Path) -> GatekeeperResult:
     md_refs = re.findall(r"!\[.*?\]\((.+?)\)", content)
     image_refs = wiki_refs + md_refs
     lecture_dir = lecture_md.parent
+    # 派生 stem(从 chapters.json)用于推断 <stem>/images/ 子目录
+    stem = _read_video_stem(work)
     missing: list[str] = []
     for ref in image_refs:
-      # 候选位置:完整路径 / 同目录 basename / images 子目录 basename
-      # (兼容 md-link `images/foo.png` 与 wiki-link `![[foo.png]]` 两种风格)
+      # 候选位置(兼容 md-link 与 wiki-link + 新旧布局):
+      # 1. 原路径(支持 `<stem>/images/foo.png` md-link)
+      # 2. 同目录 basename(支持 `foo.png` wiki-link)
+      # 3. images 子目录 basename(W3 render 默认 images/ 旁路)
+      # 4. <stem>/images/ 子目录(W3 render 实际布局:images 在 <stem>/ 下)
       basename = Path(ref).name
       candidates = [
         lecture_dir / ref,                       # 原路径
         lecture_dir / basename,                  # 同目录
-        lecture_dir / "images" / basename,       # images 子目录(W3 render 默认)
+        lecture_dir / "images" / basename,       # images 子目录
+        lecture_dir / stem / "images" / basename,  # <stem>/images/(W3+)
       ]
       if not any(c.exists() for c in candidates):
         missing.append(ref)
