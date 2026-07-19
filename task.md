@@ -519,7 +519,46 @@
   - `test_longdoc_wrapper_registers_provider_when_active` 失败:`WorkflowConfig().pipeline.longdoc_llm_provider` 默认 `"skip"`(W4 设计),wrapper 短路 return 不注册 → 测显式切 `"ollama"` 走 active
   - E2E 测试 `llm_health == {}` 失败:mock 把所有 stage 直接处理,wrapper 没机会跑 → 改成 3 个分支让 `func(ctx)` 真跑(wrapper 内调 inner stage 已 monkeypatch no-op)
 - W10-C commit:`fix(pipeline): W10-C — auto-aggregate llm_health from chapters/draft/longdoc wrappers`(`bddc387`)
-- 下次会话第一句话:承接 W10-C handoff(`bddc387` 已 commit),下一阶段:
-  - **A. 跑示例视频真实端到端**:用 2-5min 短视频 + `mtd run` 端到端,验证 `get_run_metrics` MCP 工具返回真实 LLM 健康度(替代 W8 时的空字典)
-  - **B. v1.0 release prep**:CHANGELOG + docs/installation.md + `uv build` + tag `v1.0.0` + `gh release create --draft`
-  - 推荐:**先 A 再 B**(A 是 LE 数据真实性验收,B 是对外发布)
+- 下次会话第一句话:承接 W10-A handoff,下一阶段:
+  - **修 Gatekeeper vs Verify 不一致 bug**:`gatekeeper_check` 在 longdoc skip 时放过 `output_final.html` 缺失 + `<stem>.md` 缺失两检查(W10-A §5)
+  - **W10-B v1.0 release prep**:CHANGELOG + docs/installation.md + `uv build` + tag `v1.0.0` + `gh release create --draft`
+  - 推荐:先修 Gatekeeper bug,再 release(让 release quality 干净)
+
+### 会话 16 — Phase 10 W10-A 真实端到端验证(2026-07-19,~4h)
+
+- 完成任务(W10-A 主目标完全达成 ✅):
+  - 分支:沿用 `fix/pipeline-w10-llm-health-auto-aggregate`(加新 commit)
+  - 源视频:`E:\resource\2026-01-27_年度复训\03_全站爆款流程-稳定消耗最重要 .mp4`(395 MB / 107 min)
+  - 单文件 inbox 通过 NTFS hardlink(`os.link`)建 `_w10a_inbox\` 子目录(0 字节开销),避免 CLI `find_media` 字母排序选错
+  - `mtd run --no-isolate --stop-after verify --imagegen skip`,env 三件套(`HF_ENDPOINT=hf-mirror.com` + `HF_HUB_DISABLE_XET=1` + unproxy)
+  - Pipeline 时长:**3h57min**(19:41:26 → 23:39:02,14255.9 s)— 11/11 stage 全 completed / 0 failed
+    - asr 9882s 2h45m / frames 1508s 25m / ocr 2631s 44m / chapters 47s / draft 186s / 其他 fast
+  - **W10-A 验收**:`pipeline_run.json.llm_health` 真有 chapters_ollama(1 calls)+ draft_ollama(6 calls),0 failures ✅
+  - `get_run_metrics` Python API(MCP 工具等价)返回 llm_health 真数据 ✅
+  - 清理:hardlink 目录 rm -rf 后,原 03.mp4 link count 2→1,文件完好
+- 关键设计 / 决策:
+  - **NTFS hardlink 单文件 inbox**:不修改用户原文件名 / mtime,跑完即撤,优于 rename 01/02 方案
+  - **W5 env 三件套必备**:中国大陆 + 公司 VPN proxy 必须 unset + HF_ENDPOINT=hf-mirror.com,否则 502
+  - **`get_run_metrics` Python API ≈ MCP 工具语义**:MCP tool 调用走 jsonrpc,Python API 走 in-process,数据完全一致
+  - **stdout 缓冲 vs state.json 真相**:`tee` 配合 `uv run` 时 stdout 严重缓冲,监控靠 `state.json` 真存 + `memory/<today>.md` LE L1 立即刷盘
+  - **107 min 中文培训视频 CPU 模式 ASR 实测 2h45min**(比 W5 估算 1.5-2.5h 长,中文培训语音密度 + 单核 fp16 large-v3)
+- 撞墙 / 修正:
+  - **第一次启动失败(20s 内)**:faster-whisper HF download 被 `HTTP_PROXY=http://127.0.0.1:53471` 拦 → ProxyError 502 → 修:加 env 三件套后跑通
+  - **`tee` log 不刷新**:504KB stdout 缓冲,只看到第一波 FAIL → 实际 bg 跑顺利,需 polling state.json
+  - **`cmd //c "mklink /H"` 中文路径 + 空格编码失败** → 改 `uv run python -c "import os; os.link(...)"`(Python 内部 Unicode 处理更稳)
+  - **state.json `Invalid \escape` Windows 路径撞 Python 严格 JSON parser**:写 helper `_w10a_poll.py` 内嵌反斜杠 fix 函数
+- **顺带发现 1 个 bug**:Gatekeeper vs Verify 不一致
+  - `verify/verify.json.overall_passed = true`(verify stage 写)
+  - `pipeline_run.json.gatekeeper_passed = false`(runner finally 写)
+  - 根因:gatekeeper 检查 `<stem>.md` + `<output_final.html>` 存在(longdoc 假设),但 longdoc skip 时都不存在 → FAIL
+  - **待 W11+ 修**:gatekeeper 在 longdoc skip 时放过这两个检查 + 同步两套检查逻辑
+- 工具脚本(`scripts/_w10a_*.py`):
+  - `_w10a_poll.py`:轮询 11 stage + transcript.jsonl 进度,Windows path robust
+  - `_w10a_check.py`:跑完读 verify.json + imagegen.json + 看产物布局
+  - `_w10a_verify.py`:调 `get_run_metrics` + 断言 llm_health 真有数据
+- W10-A commit:`docs(handoff): W10-A — real end-to-end verify llm_health aggregation`(待 commit)
+- 下次会话第一句话:承接 W10-A handoff,决定 W11 方向:
+  - **W11-A 修 Gatekeeper bug**:修上面 §5 — 不一致 + 长期同步两套检查
+  - **W11-B v1.0 release prep**:CHANGELOG + docs/installation.md + tag v1.0.0 + `gh release create --draft`
+  - **W11-C 真分布式文档**:用同 03.mp4 跑出 `<stem>.md` 合并 + final HTML + 看讲师视角质量
+  - 推荐:**先 W11-A 修 bug,再 W11-B release,质量干净后再 W11-C**
