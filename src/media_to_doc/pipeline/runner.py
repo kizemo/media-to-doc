@@ -68,15 +68,18 @@ def _not_implemented_stage(*args: Any, **kwargs: Any) -> None:
   )
 
 
-def _chapters_wrapper(work: Path, config: WorkflowConfig) -> Any:
-  """chapters 阶段的实际包装:从 config 派生 LLM provider,再调 split_chapters。
+def _chapters_wrapper(ctx: StageContext) -> Any:
+  """chapters 阶段的实际包装:从 ctx.config 派生 LLM provider,再调 split_chapters。
 
-  设计原因:runner 的 STAGE_FUNCS 想保持 ``func(work, config)`` 统一签名,
+  设计原因:runner 的 STAGE_FUNCS 想保持单 ctx 参数统一签名,
   但 :func:`split_chapters` 需要 provider 实例。包装层做工厂调用。
+
+  W10-C 新增:把派生出的 provider 注册到 ``ctx.metrics["llm_providers"]["chapters"]``,
+  让 ``run_pipeline`` 末尾能聚合真实 llm_health(而非空字典)。
   """
   from ..llm import get_provider
 
-  llm_cfg = config.llm
+  llm_cfg = ctx.config.llm
   provider = get_provider(
     llm_cfg.provider,
     model=llm_cfg.model,
@@ -87,14 +90,18 @@ def _chapters_wrapper(work: Path, config: WorkflowConfig) -> Any:
     timeout_seconds=llm_cfg.timeout_seconds,
     num_ctx=llm_cfg.num_ctx,
   )
-  return split_chapters(work, provider, config)
+  ctx.metrics["llm_providers"]["chapters"] = provider
+  return split_chapters(ctx.work, provider, ctx.config)
 
 
-def _draft_wrapper(work: Path, config: WorkflowConfig) -> Any:
-  """draft 阶段的包装:从 config 派生 LLM provider,再调 generate_drafts。"""
+def _draft_wrapper(ctx: StageContext) -> Any:
+  """draft 阶段的包装:从 ctx.config 派生 LLM provider,再调 generate_drafts。
+
+  W10-C:provider 注册到 ``ctx.metrics["llm_providers"]["draft"]``。
+  """
   from ..llm import get_provider
 
-  llm_cfg = config.llm
+  llm_cfg = ctx.config.llm
   provider = get_provider(
     llm_cfg.provider,
     model=llm_cfg.model,
@@ -105,21 +112,25 @@ def _draft_wrapper(work: Path, config: WorkflowConfig) -> Any:
     timeout_seconds=llm_cfg.timeout_seconds,
     num_ctx=llm_cfg.num_ctx,
   )
-  return generate_drafts(work, provider, config)
+  ctx.metrics["llm_providers"]["draft"] = provider
+  return generate_drafts(ctx.work, provider, ctx.config)
 
 
-def _longdoc_wrapper(work: Path, config: WorkflowConfig) -> Any:
-  """longdoc 阶段的包装:从 config 派生 LLM provider(provider='skip' 时短路)。
+def _longdoc_wrapper(ctx: StageContext) -> Any:
+  """longdoc 阶段的包装:从 ctx.config 派生 LLM provider(provider='skip' 时短路)。
 
-  ``config.pipeline.longdoc_llm_provider == "skip"`` → 不创建 provider,传 None;
+  ``ctx.config.pipeline.longdoc_llm_provider == "skip"`` → 不创建 provider,传 None;
   ``process_long_doc`` 内部检测到 ``provider is None`` 时只跑规则清理。
+  skip 模式下不注册 provider(避免 aggregator 误计一个 0 调用但有 name 的 provider)。
+
+  W10-C:provider 注册到 ``ctx.metrics["llm_providers"]["longdoc"]``。
   """
   from ..llm import get_provider
 
-  if config.pipeline.longdoc_llm_provider == "skip":
-    return process_long_doc(work, None, config)
+  if ctx.config.pipeline.longdoc_llm_provider == "skip":
+    return process_long_doc(ctx.work, None, ctx.config)
 
-  llm_cfg = config.llm
+  llm_cfg = ctx.config.llm
   provider = get_provider(
     llm_cfg.provider,
     model=llm_cfg.model,
@@ -129,7 +140,8 @@ def _longdoc_wrapper(work: Path, config: WorkflowConfig) -> Any:
     max_tokens=llm_cfg.max_tokens,
     timeout_seconds=llm_cfg.timeout_seconds,
   )
-  return process_long_doc(work, provider, config)
+  ctx.metrics["llm_providers"]["longdoc"] = provider
+  return process_long_doc(ctx.work, provider, ctx.config)
 
 
 STAGE_FUNCS: dict[str, Callable[..., Any]] = {
@@ -170,6 +182,10 @@ class StageContext:
     运行时配置
   hint_timestamps : list[float]
     ASR 转写产生的段落起止时间戳(``frames`` stage 用,前置 ``asr`` 后才有)
+  metrics : dict[str, Any]
+    跨 stage 累积的运行时指标(W10-C:用于聚合 LLM 健康度)。
+    默认 ``{"llm_providers": {}}``,wrapper 创建 provider 后注册:
+    ``ctx.metrics["llm_providers"][stage_name] = provider``
   """
 
   inbox: Path
@@ -178,6 +194,9 @@ class StageContext:
   video: Path | None = None
   img_dir: Path | None = None
   hint_timestamps: list[float] = field(default_factory=list)
+  metrics: dict[str, Any] = field(
+    default_factory=lambda: {"llm_providers": {}}
+  )
 
   def resolve_video(self) -> Path:
     if self.video is None:
@@ -341,7 +360,7 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
       raise FileNotFoundError(
         "chapters stage 需要 keyframes.json;请先跑 frames stage"
       )
-    func(ctx.work, ctx.config)
+    func(ctx)
     return
 
   if stage == "draft":
@@ -354,7 +373,7 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
       raise FileNotFoundError(
         "draft stage 需要 transcript.jsonl;请先跑 asr stage"
       )
-    func(ctx.work, ctx.config)
+    func(ctx)
     return
 
   if stage == "imagegen":
@@ -388,7 +407,7 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
       raise FileNotFoundError(
         "longdoc stage 需要 drafts 目录(含 <stem>.md);请先跑 render stage"
       )
-    func(ctx.work, ctx.config)
+    func(ctx)
     return
 
   if stage == "verify":
@@ -415,6 +434,46 @@ def _resolve_drafts_dir(work: Path) -> Path | None:
   stem = (data.get("video") or "").strip() or "output"
   candidate = work / "chapters" / "raw" / stem
   return candidate if candidate.exists() else None
+
+
+def _aggregate_llm_health(metrics: dict[str, Any]) -> dict[str, dict[str, int]]:
+  """聚合 ``ctx.metrics["llm_providers"]`` → 兼容 :func:`assess_llm_health` 期望格式。
+
+  格式约定(见 :mod:`media_to_doc.logger.learnings` ``assess_llm_health``):
+    ``{provider_key: {"calls": int, "failures": int}}``
+  其中 ``provider_key`` 现在是 ``f"{stage_name}_{provider.name}"``(可读 + 跨 stage 不冲突)。
+
+  异常隔离:任何 provider 的 ``.health()`` 抛错 → 记 stderr + 跳过该项,不破坏聚合。
+
+  Parameters
+  ----------
+  metrics : dict[str, Any]
+    ``ctx.metrics``,默认结构 ``{"llm_providers": {}}``
+
+  Returns
+  -------
+  dict
+    ``{f"{stage}_{provider.name}": {"calls": int, "failures": int}}``;
+    ``metrics`` 为空或 ``llm_providers`` 为空时返回 ``{}``
+  """
+  llm_providers = metrics.get("llm_providers") or {}
+  result: dict[str, dict[str, int]] = {}
+  for stage_name, provider in llm_providers.items():
+    try:
+      h = provider.health()
+    except Exception as exc:
+      # 失败隔离:不破坏 run_pipeline 返回(W8 同款模式)
+      print(
+        f"[le] provider.health() failed for {stage_name}: {exc}",
+        file=sys.stderr,
+      )
+      continue
+    key = f"{stage_name}_{provider.name}"
+    result[key] = {
+      "calls": h.total_calls,
+      "failures": h.total_failures,
+    }
+  return result
 
 
 def _read_segment_endpoints(work: Path) -> list[float]:
@@ -529,6 +588,8 @@ def run_pipeline(
   pipeline_run: PipelineRun | None = None
 
   try:
+    # W10-C:ctx 创建移到 loop 外,让 ctx.metrics 跨 stage 累积(LLM providers 注册需要)
+    ctx = StageContext(inbox=inbox, work=work, config=cfg)
     for stage in STAGE_ORDER:
       if skip_completed and state.stages[stage].is_completed:
         completed_now.append(stage)
@@ -540,7 +601,6 @@ def run_pipeline(
           break
         continue
 
-      ctx = StageContext(inbox=inbox, work=work, config=cfg)
       try:
         run_stage(stage, ctx, state, logger)
       except Exception:
@@ -561,9 +621,10 @@ def run_pipeline(
       print(f"[le] gatekeeper_check failed: {exc}", file=sys.stderr)
 
     try:
+      # W10-C:跨 stage 累积的 LLM provider.health() 真正写入 pipeline_run.json
       pipeline_run = logger.finalize(
         gatekeeper_result=gatekeeper,
-        llm_health={},  # TODO(W9+): 跨 stage 累积 LLM provider.health()
+        llm_health=_aggregate_llm_health(ctx.metrics),
       )
     except Exception as exc:
       print(f"[le] logger.finalize failed: {exc}", file=sys.stderr)
