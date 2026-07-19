@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-18(Phase 1 W4 完成)
+最后更新:2026-07-19(Phase 1 W5 部分完成)
 
 ---
 
@@ -281,3 +281,30 @@
   - A. 跑通示例视频(端到端冒烟)
   - B. 进入 Phase 2 L2 LE 闭环(迁移 `_research/le_prototype/`)
   - C. 接入 CLI `mtd run` / `mtd resume`(11 stage 已就位)
+
+### 会话 9 — Phase 1 W5 端到端冒烟(部分完成,2026-07-18 ~ 07-19,~1.5h)
+
+- 完成任务(W5 部分完成,撞墙 4 项,ASR 后台跑):
+  - 分支:`feat/pipeline-w5-smoke`(基于 W4 `3b32743`)
+  - `uv sync --all-extras` 装齐依赖(llm/asr/frames/ocr/imagegen/longdoc/mcp,~5GB)
+  - 备份 `output/` 旧产物 → `output-backup-2026-07-18/`
+  - `scripts/run_smoke.py`(254 行)— 端到端 smoke runner + inbox 隔离 + 网络环境默认
+  - `CLAUDE.md` §4.1 输出目录约定(项目级规则,2026-07-18 用户确认)
+  - **inbox isolation bug fix**:`_isolate_inbox` 加 `exclude_dirs=[work]`,避免 rglob 误移 `output/asr/audio.wav`
+  - **HF 下载修复**:`HF_ENDPOINT=https://hf-mirror.com` + `HF_HUB_DISABLE_XET=1`,显式 unset 系统代理
+  - `transcript.jsonl` 部分产出(bx2o443en 后台跑中,49KB / 382 segments / 1582s)
+- 撞墙:
+  - HF 模型下载:proxy 502 → 直连超时 → xet 401 → 禁用 xet 走 hf-mirror.com 解决
+  - inbox 隔离误移 work_dir 内文件:`rglob` 递归扫到 `output/`,audio.wav 被错误移走 → exclude_dirs 修复
+  - CUDA 不可用:`torch.cuda.is_available()=False`,RTX 3090 + Windows + 当前 torch build 不兼容 → CPU 模式 ASR(112min 视频预计 1-2h)
+  - 两个 ASR 并发争 CPU:`taskkill /F /PID` 杀掉 bre53o53u,让 bx2o443en 独占
+- 关键决策:
+  - HF mirror + 禁用 xet 是中国大陆用户默认网络配置
+  - inbox 隔离必须排除 work_dir(work 在 inbox 子目录时尤其重要)
+  - smoke 脚本顶部内置网络环境(setdefault 不覆盖用户传入)
+- 测试:`uv run pytest` 346 passed / 3 skipped(未变,smoke 是产品代码不新增测试)
+- 下次会话第一句:承接 `handoff-pipeline-w5-smoke-2026-07-18.md`,等 ASR 完成 + 续跑 + commit + 决定 W6 方向(B/C/D)
+  - **W6 候选**:
+    - B. Phase 2 L2 LE 闭环(迁移 `_research/le_prototype/`)
+    - C. 接入 CLI `mtd run` / `mtd resume`
+    - D. MCP server 接入(6 工具 + Claude Desktop 配置)
