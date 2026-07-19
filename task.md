@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-19(Phase 1 W5 完成;W6 CLI 实装;W7 MCP server 完成;**W8 LE 闭环完成**)
+最后更新:2026-07-19(Phase 0 ~ Phase 6 全部完成;**W9 文档与 Python API re-export 完成**;508 测试)
 
 ---
 
@@ -69,19 +69,22 @@
 
 ## Phase 4 — 跨项目可调用(L1)
 
-- [ ] `__init__.py` 顶层 re-export + lazy import(PEP 562),重依赖按需加载
+- [x] `__init__.py` 顶层 re-export + lazy import(PEP 562),52 个符号 — **W9 完成**
 - [x] `cli.py` `media-to-doc run <inbox>` / `media-to-doc resume <work>` 命令 — **W6 完成**
 - [ ] `pyproject.toml` `[project.scripts]` 注册 CLI 入口(已注册 `mtd`,验证 OK)
-- [x] `mcp_server.py` stdio MCP server,6 个工具 — **W7 完成**:
+- [x] `mcp_server.py` stdio MCP server,**8 个工具**(W7=6 + W8=2 LE 健康度)— **W7 + W8**:
   - [x] `list_courses(workspace_root)`
   - [x] `run_pipeline(inbox_dir, workspace_root, llm, imagegen, longdoc_llm, no_longdoc, force, stop_after)`
   - [x] `resume_pipeline(work_dir, inbox_dir, force, stop_after)`
   - [x] `check_status(work_dir)`
   - [x] `list_outputs(inbox_dir)`
   - [x] `read_lecture(inbox_dir, version, fmt)` — 支持 `raw/cleaned/final`
-- [x] Claude Desktop 配置文档 — `docs/MCP_INTEGRATION.md` (**W7**)
+  - [x] `get_run_metrics(work_dir)` — **W8 LE**
+  - [x] `list_runs(workspace_root, limit)` — **W8 LE**
+- [x] Claude Desktop 配置文档 — `docs/MCP_INTEGRATION.md`(**W7 + W8 更新**)
 - [x] `cli.py` `mtd status` / `mtd list` 命令 — **W6 完成**
 - [x] `cli.py` `mtd mcp` 子命令(启动 MCP server)— **W7 完成**
+- [x] `examples/cross_project_demo.py` — **W9 完成**(4 个 demo)
 
 ---
 
@@ -114,10 +117,13 @@
 
 ## Phase 7 — 文档与示例(L2)
 
-- [ ] README 完善:安装 / 4 种调用方式 / API 表 / 环境变量表 / 产物布局图
-- [ ] 示例 inbox 视频(可选,公开域名的小样)
-- [ ] `.learnings/LEARNINGS.md` 首批 LP-YYYYMMDD-NNN 条目
-- [ ] 跨项目使用 demo(其它 Claude 项目里 import 的最小代码片段)
+- [x] README 完善:安装 / 4 种调用方式 / API 表 / 环境变量表 / 产物布局图 — **W9**
+- [ ] 示例 inbox 视频(可选,公开域名的小样)— 留作 v1.0
+- [x] `.learnings/LEARNINGS.md` 首批 LP-YYYYMMDD-NNN 条目(14 条,W1-W8 沉淀)— **W9**
+- [x] 跨项目使用 demo — `examples/cross_project_demo.py`(4 个 demo)— **W9**
+- [x] `__init__.py` 顶层 re-export(PEP 562,52 个符号 lazy import)— **W9**
+- [x] `docs/MCP_INTEGRATION.md` 更新 W8 2 工具(总数 6 → 8)— **W9**
+- [x] `CLAUDE.md` §9.3 / §9.4 更新 — **W9**
 
 ---
 
@@ -451,3 +457,34 @@
   - **B. Python API 顶层 re-export**(让其它项目 `from media_to_doc import run_pipeline` 直接用)
   - **C. 端到端 LE 验证**(跑 3 次示例视频演示 Pattern-Key 自动晋升)
   - **D. 修 llm_health 自动聚合**(改 `_chapters_wrapper` 接 ctx.metrics)
+
+### 会话 14 — Phase 7 + Phase 4 收尾 W9 文档与 Python API re-export(2026-07-19,~2h)
+
+- 完成任务(用户选 A + B 组合):
+  - **B 部分:Python API 顶层 re-export**(PEP 562 `__getattr__`)
+    - `src/media_to_doc/__init__.py` 重写:52 个公开符号通过 `_LAZY_EXPORTS` 注册,首次访问才 `importlib.import_module`
+    - `import media_to_doc` 启动 < 100ms,faster-whisper / scenedetect / rapidocr / diffusers / anthropic / ollama / openai 7 个重依赖按需加载
+    - `__dir__()` 列出所有公开符号支持 IDE 自动补全
+    - `tests/test_init.py`:26 用例覆盖 lazy import / 缓存 / 未知符号 / dir / `__all__` 一致性 / 重依赖不加载 / PipelineResult dataclass 字段
+  - **A 部分:Phase 7 文档**
+    - `README.md` 全面重写:5 分钟快速开始 / 3 种调用方式 / 公开 API 表(52 符号)/ 环境变量表(11 变量)/ 产物布局图(W3-W8 稳定版)/ LE 五层闭环表 / 文档导航 / 路线图 / 开发指南
+    - `.learnings/LEARNINGS.md` 首批 14 条 LP-20260718/19-NNN 条目,覆盖 W1-W8 关键 best_practice
+    - `docs/MCP_INTEGRATION.md` 更新:W7=6 工具 → W7+W8=8 工具,加 `get_run_metrics` / `list_runs` 详细签名 + 示例 prompt
+    - `CLAUDE.md` §9.3 Python API 示例 + §9.4 MCP 8 工具清单更新
+    - `examples/cross_project_demo.py`:4 个 demo(`demo-lazy` / `demo-metrics` / `demo-pipeline` / `demo-config`),可作为 `uv run python examples/cross_project_demo.py demo-lazy` 直接验证
+- 测试:`uv run pytest` 482 → **508 passed / 0 skipped**(+26,W9 init 测试)
+- ruff:All checks passed
+- 验证:demo 端到端跑通 3 个(`demo-lazy` / `demo-config` / `demo-metrics`),`import media_to_doc` 不触发重依赖
+- 关键设计:
+  - **`_LAZY_EXPORTS` dict 作为单一真相源**:新增公开符号只需追加一行 + `__all__` 一行,无侵入
+  - **`test_lazy_exports_target_modules_importable`**:保护性测试,确保 `_LAZY_EXPORTS` 没有 typo
+  - **`test_import_media_to_doc_does_not_load_heavy_modules`**(parametrize 7 个):验证 lazy import 行为不退化,7 个重依赖全部不在 `sys.modules`
+  - **demo 端到端验证**:`demo-lazy` 用 sys.modules 断言 + `demo-metrics` 用 list_runs 真实调用,组合起来是 manual smoke test 的替代
+- 撞墙 / 修正:
+  - `test_pipeline_result_is_a_dataclass` 最初断言 `is_completed in fields` → `is_completed` 是 State 的 property,PipelineResult 字段是 `state / completed / failed / duration_seconds / pipeline_run` → 改断言正确字段
+  - ruff W292 缺末尾换行 + I001 import 排序未规范 → `ruff --fix` 自动修 4 处
+- 下次会话第一句:承接 W9 handoff,决定 v1.0 收尾方向:
+  - **A. 跑示例视频真实端到端**(W5 已有 2 个 transcript,可拿 bx2o443en 跑完 chapters/draft/render/longdoc/verify)
+  - **B. v1.0 release prep**(CHANGELOG / GitHub Release / PyPI 发布 / docs/installation.md)
+  - **C. 修 W8 技术债 D**:`_chapters_wrapper` 等接 ctx.metrics 自动聚合 llm_health
+  - **D. UI:Tauri 2 桌面壳启动**(Phase 8 候选)

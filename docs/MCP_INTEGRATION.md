@@ -1,10 +1,11 @@
 # MCP Server 集成指南
 
-> 适用版本:**media-to-doc v0.1.0+**(W7 已落地)
+> 适用版本:**media-to-doc v0.1.0+**(W7 + W8)
 > 上游依赖:`mcp>=1.0.0`(已在 `[mcp]` extras / `all` extras 注册)
 
-media-to-doc 提供 6 个 MCP 工具,可在 Claude Desktop / Codex / Cline 等
-MCP 客户端中调用,把"启动流水线"和"读讲义"封装为对话式工具调用。
+media-to-doc 提供 **8 个 MCP 工具**(W7=6 + W8=2),可在 Claude Desktop /
+Codex / Cline 等 MCP 客户端中调用,把"启动流水线 / 读讲义 / 查 LE 健康度"
+封装为对话式工具调用。
 
 ---
 
@@ -44,7 +45,7 @@ exec uv --project F:/soft/00selfmade/media-to-doc run mtd-mcp "$@"
 
 ---
 
-## 2. 6 个工具
+## 2. 8 个工具
 
 | 工具 | 类型 | 用途 |
 |---|---|---|
@@ -54,6 +55,8 @@ exec uv --project F:/soft/00selfmade/media-to-doc run mtd-mcp "$@"
 | `check_status` | 只读 | 查 11 stage 进度 |
 | `list_outputs` | 只读 | 列出产物(按类别分组) |
 | `read_lecture` | 只读 | 读讲义(raw / cleaned / final × md / html) |
+| `get_run_metrics` | 只读 | **W8** 读单个课程的 LE 元数据(state + pipeline_run + errors) |
+| `list_runs` | 只读 | **W8** 扫 workspace 所有 run,带跨 run LLM 健康度 |
 
 ---
 
@@ -152,6 +155,42 @@ read_lecture(
 - `cleaned`:longdoc 净化稿(`<stem>_cleaned.md`)
 - `final`:longdoc 最终 HTML(`<stem>_final.html`,带 TOC + 锚点 + 内嵌 CSS)
 
+### 3.7 `get_run_metrics` (W8)
+
+```python
+get_run_metrics(work_dir: str) -> dict
+```
+
+**Returns**: 一次性返回
+
+- `course` / `inbox_path` / `work_dir`:课程元信息
+- `state`:11 stage 调度状态(scheduler 真相源)
+- `pipeline_run`:LE 沉淀层元数据(`memory/YYYY-MM-DD.md` + LE 质量分数 + `llm_health`)
+- `gatekeeper_passed`:L2 审核层通过标记
+- `errors`:Pattern-Key 列表(L4 进化层自动晋升候选)
+
+**示例 Prompt**:
+> "查 work/培训01/ 的 LE 健康度,如果有 gatekeeper 失败就告诉我"
+
+### 3.8 `list_runs` (W8)
+
+```python
+list_runs(
+  workspace_root: str | None = None,
+  limit: int = 20,
+) -> dict
+```
+
+**Returns**:
+
+- `workspace` / `work_root`:扫描根
+- `total_runs`:扫到的 run 总数
+- `runs`:每个 run 的摘要(course / mtime / pipeline_run 部分字段)
+- `llm_health_global`:跨 run 的 LLM 健康度聚合(失败率 + 推荐策略)
+
+**示例 Prompt**:
+> "列出我最近 10 个跑过的课程,看整体 LLM 失败率高不高"
+
 ---
 
 ## 4. 推荐工作流
@@ -218,7 +257,7 @@ uv run mtd-mcp
  echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":2}') | uv run mtd-mcp
 ```
 
-应看到 6 个工具的 JSON 描述。
+应看到 8 个工具的 JSON 描述。
 
 ### 6.3 已知限制
 

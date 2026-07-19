@@ -251,16 +251,50 @@ uv run <cli-name> resume workspace/work/<课程名>/
 
 ### 9.3 在其它项目里调用本项目
 
+**W9 实装** — PEP 562 `__getattr__` 顶层 re-export,重依赖按需加载:
+
 ```python
 # Python API(其它项目)
 from media_to_doc import (
-    WorkflowConfig, transcribe, extract_keyframes, ...
+    # 配置
+    WorkflowConfig, LLMConfig, ImagegenConfig,
+    # 流水线
+    STAGE_ORDER, run_pipeline, run_stage, PipelineResult,
+    # 11 stage 函数
+    prepare_audio, transcribe, extract_keyframes, run_ocr,
+    correct_asr, split_chapters, generate_drafts, generate_images,
+    render_outputs, process_long_doc, verify_pipeline,
+    # LLM
+    BaseLLMProvider, get_provider,
+    # LE 健康度(W8)
+    get_run_metrics, list_runs, PipelineLogger, gatekeeper_check,
 )
+```
+
+完整公开 API 列表见 `media_to_doc.__all__`(40 个符号)。
+
+最小可跑示例(其它项目里直接调用):
+
+```python
+from pathlib import Path
+from media_to_doc import WorkflowConfig, run_pipeline, list_runs
+
+cfg = WorkflowConfig()  # 默认 ollama + skip imagegen
+result = run_pipeline(
+    inbox=Path("inbox/我的培训"),
+    work=Path("output/我的培训"),
+    config=cfg,
+    stop_after="chapters",  # 先看 LLM 章节质量
+)
+
+# 跨 run 健康度查询
+runs = list_runs(workspace_root="output", limit=10)
+print(f"total_runs={runs['total_runs']}, llm_health={runs['llm_health_global']}")
 ```
 
 ### 9.4 MCP server 配置(Claude Desktop)
 
-**W7 已实装**(6 工具 + stdio JSON-RPC + Claude Desktop 集成文档):
+**W7 + W8 已实装**(8 工具 + stdio JSON-RPC + Claude Desktop 集成文档):
 
 ```json
 {
@@ -273,10 +307,12 @@ from media_to_doc import (
 }
 ```
 
-完整用法、6 工具签名、错误处理、调试技巧见 [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md)。
+完整用法、8 工具签名、错误处理、调试技巧见 [docs/MCP_INTEGRATION.md](docs/MCP_INTEGRATION.md)。
 
-工具清单:`list_courses` / `run_pipeline` / `resume_pipeline` /
-`check_status` / `list_outputs` / `read_lecture`(后 4 个只读,可安全调用)。
+工具清单(W7=6 + W8=2):
+
+- **W7**:`list_courses` / `run_pipeline` / `resume_pipeline` / `check_status` / `list_outputs` / `read_lecture`(后 4 个只读)
+- **W8(LE 健康度)**:`get_run_metrics` / `list_runs`(均只读)
 
 ---
 
