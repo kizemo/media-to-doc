@@ -110,8 +110,16 @@
 - [x] **`llm/health.py` + MCP 暴露**(`get_run_metrics(work_dir)` + `list_runs(workspace_root)` + `get_escalated_errors` + 2 MCP 工具)— **W8**
 - [ ] **UI:Learnings 页**(读 `.learnings/` 显示)— Phase 2 UI 任务
 - [ ] **端到端验证**(跑 3 次示例视频,演示 Pattern-Key 自动晋升)— W9+ 真实跑
-- [x] 测试:`test_logger/*` 61 用例 + `test_llm/test_health.py` 15 用例 + MCP 6 新增 — **W8**
+- [x] 测试:`test_logger/*` 61 用例 + `test_llm/test_health.py` 15 用例 + MCP 6 新例 — **W8**
 - [x] commit:`feat(pipeline): W8 — wire Loop Engineering L1+L2 to runner + 8 tools`(`2eb4591`)
+- [x] **W10-C:跨 stage 自动聚合 llm_health** — **W10 完成** (`bddc387`)
+  - [x] `StageContext.metrics: dict[str, Any]` 字段 + 默认 `{"llm_providers": {}}`
+  - [x] `_chapters_wrapper` / `_draft_wrapper` / `_longdoc_wrapper` 签名从 `(work, config)` 改为 `(ctx: StageContext)`,注册 provider 到 `ctx.metrics["llm_providers"][stage_name]`
+  - [x] `run_pipeline` 把 ctx 创建移到 for loop 外,metrics 跨 stage 累积
+  - [x] 新增 `_aggregate_llm_health(metrics)` helper,key=`{stage}_{provider.name}`,value=`{"calls", "failures"}`
+  - [x] `logger.finalize(llm_health=_aggregate_llm_health(ctx.metrics))` 替换原 `{}` TODO
+  - [x] 测试 519 passed / 0 skipped(508 → 519,+11),端到端验证 `pipeline_run.json.llm_health` 含 chapters_ollama / draft_ollama / longdoc_anthropic 三组数据
+  - [x] commit:`fix(pipeline): W10-C — auto-aggregate llm_health from chapters/draft/longdoc wrappers`(`bddc387`)
 
 ---
 
@@ -488,3 +496,30 @@
   - **B. v1.0 release prep**(CHANGELOG / GitHub Release / PyPI 发布 / docs/installation.md)
   - **C. 修 W8 技术债 D**:`_chapters_wrapper` 等接 ctx.metrics 自动聚合 llm_health
   - **D. UI:Tauri 2 桌面壳启动**(Phase 8 候选)
+
+### 会话 15 — Phase 10 W10-C 修 W8 技术债 D(2026-07-19,~1.5h)
+
+- 完成任务(W10-C 全交付,用户从 v1.0 候选里选 C):
+  - 分支:`fix/pipeline-w10-llm-health-auto-aggregate`(基于 W9 `7dfb5f2`)
+  - `StageContext.metrics: dict[str, Any]` 默认 `{"llm_providers": {}}`(新字段,W10-C)
+  - 3 个 wrapper 签名 `(work, config)` → `(ctx: StageContext)`,注册 provider 到 `ctx.metrics["llm_providers"][stage]`
+  - `run_pipeline` 把 ctx 创建移到 for loop 外,让 metrics 跨 stage 累积(顺便让 `hint_timestamps` 真正传到 frames,W8 隐 bug 修复)
+  - 新增 `_aggregate_llm_health(metrics)` helper,key=`{stage}_{provider.name}`,value=`{"calls", "failures"}` 兼容 `assess_llm_health`
+  - `_invoke_stage` 3 个分支(chapters / draft / longdoc)从 `func(ctx.work, ctx.config)` 改为 `func(ctx)`
+  - `logger.finalize(llm_health={})` TODO 替换为 `logger.finalize(llm_health=_aggregate_llm_health(ctx.metrics))`
+  - 测试 508 → **519 passed / 0 skipped**(+11 个 W10-C 新增):StageContext schema / 3 wrapper 注册 / skip 模式不注册 / _aggregate 边界 / provider.health() 异常隔离 / **run_pipeline 端到端验证 `pipeline_run.json.llm_health` 三组数据**
+  - ruff:**All checks passed**
+- 关键设计:
+  - **wrapper 签名改为 `(ctx)`**:不再有 "if ctx is not None" 判空逻辑,单一参数接口
+  - **ctx 创建移到 loop 外**:三层收益(metrics 累积 + hint_timestamps 真传到 frames + 闭包友好)
+  - **longdoc 默认 `skip` 模式下不注册 provider**:避免 aggregator 把"未跑 LLM"stage 也计入
+  - **provider.health() 异常 → stderr warning + 跳过该项**:失败隔离,W8 PipelineLogger 同款模式
+  - **key 格式 `{stage_name}_{provider.name}`**:跨 stage 不冲突 + 仍被 `assess_llm_health` 正确 sum
+- 撞墙 / 修正:
+  - `test_longdoc_wrapper_registers_provider_when_active` 失败:`WorkflowConfig().pipeline.longdoc_llm_provider` 默认 `"skip"`(W4 设计),wrapper 短路 return 不注册 → 测显式切 `"ollama"` 走 active
+  - E2E 测试 `llm_health == {}` 失败:mock 把所有 stage 直接处理,wrapper 没机会跑 → 改成 3 个分支让 `func(ctx)` 真跑(wrapper 内调 inner stage 已 monkeypatch no-op)
+- W10-C commit:`fix(pipeline): W10-C — auto-aggregate llm_health from chapters/draft/longdoc wrappers`(`bddc387`)
+- 下次会话第一句话:承接 W10-C handoff(`bddc387` 已 commit),下一阶段:
+  - **A. 跑示例视频真实端到端**:用 2-5min 短视频 + `mtd run` 端到端,验证 `get_run_metrics` MCP 工具返回真实 LLM 健康度(替代 W8 时的空字典)
+  - **B. v1.0 release prep**:CHANGELOG + docs/installation.md + `uv build` + tag `v1.0.0` + `gh release create --draft`
+  - 推荐:**先 A 再 B**(A 是 LE 数据真实性验收,B 是对外发布)

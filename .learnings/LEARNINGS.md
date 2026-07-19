@@ -274,6 +274,24 @@ faster-whisper / diffusers / anthropic 等重依赖。
 
 ---
 
+### LP-20260719-015 — `StageContext.metrics` 做跨 stage 累积容器,wrapper 注册 + 末尾聚合
+
+**上下文**:流水线中多个 stage 需要累积运行时指标(LLM 调用统计、计时、外部 SDK 句柄等),传统做法是 module-level 全局变量 / 参数透传,但前者多 run 冲突,后者改 STAGE_FUNCS 接口。
+
+**做法**:
+- `StageContext` 加 `metrics: dict[str, Any]` 字段,默认 `default_factory=lambda: {"llm_providers": {}}`
+- 3 个 LLM wrapper(`_chapters_wrapper` / `_draft_wrapper` / `_longdoc_wrapper`)签名从 `(work, config)` 改为 `(ctx)`,创建 provider 后注册 `ctx.metrics["llm_providers"][stage_name] = provider`
+- `run_pipeline` 把 `ctx = StageContext(...)` 创建移到 `for` loop 外,让 metrics 跨 stage 累积
+- run_pipeline 末尾(LE finally 块)调聚合 helper:`_aggregate_llm_health(ctx.metrics)` → 喂给 `logger.finalize(llm_health=...)`
+- 聚合 key 用 `{stage_name}_{provider.name}`(跨 stage 不冲突 + `assess_llm_health` 仍 sum)
+
+**启示**:跨 stage 累积 = ctx 设计模式。ctx 已经存在(共享 inbox/work/config),直接扩 fields 不引入新概念。配合 wrapper 接受 ctx + 聚合 helper,模块化和测试都不破坏。**通用模式**:任何需要在多步骤流水线末尾聚合运行时数据的场景(Pipeline / Builder / Saga 模式),都适合 "ctx.metrics + 注册 + 末尾聚合" 三件套。
+
+**相关文件**:`src/media_to_doc/pipeline/runner.py`(StageContext / 3 wrapper / `_aggregate_llm_health`)
+**作者**:Claude W10-C
+
+---
+
 ## 沉淀规则
 
 - 每条 LP 条目必须有 **上下文 / 做法 / 启示** 三段,缺一不收
