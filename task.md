@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-19(Phase 0 ~ Phase 6 全部完成;**W9 文档与 Python API re-export 完成**;508 测试)
+最后更新:2026-07-19(Phase 0 ~ Phase 6 + 7 + 10 全部完成;**W11-A Gatekeeper vs Verify 一致性修复完成**;529 测试 / 0 skip)
 
 ---
 
@@ -120,6 +120,24 @@
   - [x] `logger.finalize(llm_health=_aggregate_llm_health(ctx.metrics))` 替换原 `{}` TODO
   - [x] 测试 519 passed / 0 skipped(508 → 519,+11),端到端验证 `pipeline_run.json.llm_health` 含 chapters_ollama / draft_ollama / longdoc_anthropic 三组数据
   - [x] commit:`fix(pipeline): W10-C — auto-aggregate llm_health from chapters/draft/longdoc wrappers`(`bddc387`)
+
+---
+
+## Phase 11 — Bug 修复(W11)
+
+- [x] **W11-A:Gatekeeper vs Verify 一致性** — **W11-A 完成** (`d2b39d3`)
+  - [x] 根因诊断:`gatekeeper.py` 两个 resolver 写死 W4 原型路径,verify.py W5 已迁新布局
+  - [x] `_resolve_lecture_path` 优先新布局 `<work>/chapters/raw/<stem>.md`,回退旧布局 `<work>/chapters/raw/<stem>/<stem>.md`
+  - [x] `_resolve_final_html` 优先新布局 `<work>/chapters/raw/<stem>_final.html`,回退旧布局 `<work>/output_final.html`
+  - [x] 新增 `_read_video_stem` helper(避免重复 chapters.json 解析)
+  - [x] `gatekeeper_check` image_refs 候选路径加第 4 项 `<lecture_dir>/<stem>/images/<basename>`(W3 render 实际 image 位置)
+  - [x] 测试 519 → **529 passed**(+10 新用例):2 个 resolver 新布局 + 3 个 TestGatekeeperNewLayout + 2 个 TestGatekeeperVerifyConsistency + 3 个 fallback resolver 测试
+  - [x] W10-A 真跑产物验证:`gatekeeper.ok=True`(修复前 False),`verify.overall_passed=True`,两者一致 ✅
+  - [x] 新增 `scripts/_w11a_consistency.py`(可复用 3-way exit 验收工具:0=PASS / 1=both FAIL / 2=inconsistent → regression)
+  - [x] commit:`fix(pipeline): W11-A — align gatekeeper path resolution with verify layout`(`d2b39d3`)
+  - [x] handoff:`handoff-pipeline-w11-gatekeeper-2026-07-19.md`
+- [ ] **W11-B v1.0 release prep**:CHANGELOG + docs/installation.md + pyproject urls + uv build + gh release create --draft(2-3h)
+- [ ] **W11-C 长视频 + 真 LLM 文档质量验收**:同 03.mp4 跑 longdoc active 净化 + 看讲师视角讲义质量(3-4h 真跑)
 
 ---
 
@@ -562,3 +580,29 @@
   - **W11-B v1.0 release prep**:CHANGELOG + docs/installation.md + tag v1.0.0 + `gh release create --draft`
   - **W11-C 真分布式文档**:用同 03.mp4 跑出 `<stem>.md` 合并 + final HTML + 看讲师视角质量
   - 推荐:**先 W11-A 修 bug,再 W11-B release,质量干净后再 W11-C**
+
+### 会话 17 — Phase 11 W11-A Gatekeeper vs Verify 一致性修复(2026-07-19,~30min)
+
+- 完成任务(W11-A 主目标完全达成 ✅,用户从 W10-A 候选里选 A):
+  - 分支:`fix/pipeline-w11-gatekeeper-paths`(基于 W10-A `3ab6f6d`)
+  - 根因诊断:`ls` W10-A 产物 → `_resolve_lecture_path` 写死 W4 原型路径 `<stem>/<stem>.md`,实际文件在 `<stem>.md`(drafts_dir parent);`_resolve_final_html` 写死 `<work>/output_final.html`,实际在 `<work>/chapters/raw/<stem>_final.html`
+  - **修复**:`_resolve_lecture_path` 优先新布局回退旧布局;`_resolve_final_html` 同样双布局;加 `_read_video_stem` helper;image_refs 候选路径加第 4 项 `<lecture_dir>/<stem>/images/<basename>`(W3 render 实际图片位置)
+  - 测试:**519 → 529 passed**(+10 用例):2 个 resolver 新布局 + 3 个 TestGatekeeperNewLayout + 2 个 TestGatekeeperVerifyConsistency + 3 个 resolver fallback
+  - ruff:All checks passed
+  - **W10-A 真跑产物验证**:`E:/.../2026-01-27_年度复训/output/` 上 gatekeeper.ok=True(修复前 False),verify.overall_passed=True,两者一致 ✅
+  - 工具脚本:`scripts/_w11a_consistency.py`(可复用 3-way exit 验收:0=PASS / 1=both FAIL / 2=inconsistent → regression)
+  - W11-A commit:`fix(pipeline): W11-A — align gatekeeper path resolution with verify layout`(`d2b39d3`)
+- 关键设计:
+  - **新布局优先(W3+,默认)→ 旧布局回退(W4 原型)**:当前主流是新布局,旧布局保留兼容
+  - **`_resolve_lecture_path` 返回路径而非 None**:即使文件不存在也返回诊断用路径,让 error message 显示预期路径
+  - **image_refs 加 `<stem>/images/` 子目录候选**:W3 render 实际产物布局(images 在 `<stem>/` 子目录)
+  - **TestGatekeeperVerifyConsistency 防回归**:任何 layout 变化时这套测试若失败就说明 gatekeeper / verify 又分叉
+- 撞墙 / 修正:
+  - **fixture 第一次设计错**:`_setup_w10a_layout` 写成 `<work>/chapters/raw/course1.md`(无 drafts_dir 目录)→ verify 用 drafts_dir=`raw/`,output_stem="raw" 而非 "course1" → 修:加 `<work>/chapters/raw/course1/` 目录(verify chapters_complete 需要)
+  - **Chapter dataclass 字段缺失**:fixture 写 `chapters: [{"idx": i} for i in range(1, 4)]` → `Chapter.__init__()` 缺 title/summary/start_seconds/end_seconds → 改用空 chapters 列表
+  - **final_html 内容 dummy**:`<html>x...</html>` 无 `<title>` 无 H1 → verify html_structure FAIL → 改用 `<!doctype html><html><head><title>...</title></head><body><h1>...</h1>...`
+- W11-A commit:`d2b39d3 fix(pipeline): W11-A — align gatekeeper path resolution with verify layout`
+- 下次会话第一句话:承接 W11-A handoff,决定 W11-B 方向:
+  - **W11-B v1.0 release prep**(2-3h):CHANGELOG + docs/installation.md + pyproject urls + `uv build` + `gh release create v1.0.0 --draft`
+  - **W11-C 长视频 + 真 LLM 文档质量验收**(3-4h 真跑):同 03.mp4 跑 longdoc active 净化 + 看讲师视角讲义质量
+  - 推荐:**先 W11-B release(Gatekeeper 已修干净,可放心打 tag)→ 再 W11-C 真质量验收**
