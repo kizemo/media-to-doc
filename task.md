@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-19(Phase 1 W5 部分完成)
+最后更新:2026-07-19(Phase 1 W5 完成 — 端到端冒烟跑通)
 
 ---
 
@@ -308,3 +308,31 @@
     - B. Phase 2 L2 LE 闭环(迁移 `_research/le_prototype/`)
     - C. 接入 CLI `mtd run` / `mtd resume`
     - D. MCP server 接入(6 工具 + Claude Desktop 配置)
+
+### 会话 10 — Phase 1 W5 端到端冒烟完成(2026-07-19,~3h)
+
+- 完成任务(W5 完整跑通 + 修复 4 项真实 bug):
+  - 起点:`bx2o443en` ASR 在 CPU 模式跑到 85.7%(5780/6743s)未完,主动 `taskkill //F //PID 30192` 接受部分 transcript
+  - **Bug 1(OCR 路径)**:`runner.py` ocr 阶段不传 output_dir → OCR 写 `inbox/img/ocr/`,asr_correct 读 `work/ocr/` 不匹配 → JSONDecodeError
+  - **Bug 2(Ollama 上下文)**:`LLMConfig.num_ctx` 默认 None → Ollama 用 4096 → 长 transcript 50816 tokens 超过 qwen3:14b max 40960
+  - **Bug 3(transcript 截断)**:`_load_transcript` 不限长度 → chapters prompt 50k tokens
+  - **Bug 4(longdoc/verify 路径布局)**:render W3 把 `<stem>.md` 写到 `<work>/chapters/raw/`,但 longdoc/verify 按旧布局找 `<drafts_dir>/<stem>.md`
+  - **完整 11 stage 跑通**:audio → asr → frames → ocr → asr_correct → chapters → draft → imagegen(skip) → render → longdoc(skip) → verify
+  - **`verify.json` overall_passed=true**,4 check 全 pass(outputs_exist / chapters_complete / image_refs / html_structure)
+  - 最终产物:`output.md` 270 行 + `output_final.html` 25.8KB + `verify.json`
+- 关键决策:
+  - 主动 kill ASR 接受 85% transcript(避免 session 超时)
+  - Ollama num_ctx 默认 65536(qwen3:14b 原生 32k,RoPE 扩展可接受)
+  - chapters transcript 截断 30000 chars(适配 32k context,留 system prompt 余量)
+  - longdoc/verify 兼容新旧两种布局(避免破坏 W4 测试)
+- 测试:`uv run pytest` 349 passed / 3 skipped(+3 from W4 baseline,num_ctx integration)
+- ruff:All checks passed
+- W5 commits(3 个,feat/pipeline-w5-smoke 分支):
+  - `db92ac9` fix(pipeline): W5 smoke fixes — OCR output path, num_ctx, transcript truncate, longdoc/verify layout
+  - `82af24c` docs(handoff): add W5 pipeline snapshot + task.md progress
+  - `29f018e` feat(scripts): W5 — smoke runner with inbox isolation
+- 下次会话第一句:承接 `handoff-pipeline-w5-smoke-2026-07-19.md`,决定 W6 方向:
+  - **B. Phase 2 L2 LE 闭环**(迁移 `_research/le_prototype/`)— 1.5-2h,基础设施
+  - **C. CLI `mtd run`/`resume`**(11 stage 已就位,W5 smoke 验证过端到端)— 1h,最直接 win
+  - **D. MCP server 接入**(6 工具 + Claude Desktop 配置)— 2-3h,产品价值最大
+- **推荐排序**:C → D → B(W6=C CLI,W7=D MCP,W8=B LE)
