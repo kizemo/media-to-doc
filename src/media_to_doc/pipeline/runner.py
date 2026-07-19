@@ -1,23 +1,33 @@
-"""流水线编排器(runner)— 串起 11 stage。
+"""流水线编排器(runner)— 串起 11 stage + LE 闭环。
 
 W4 状态(2026-07-18):
 - 11 stage 全部实装:``audio`` / ``asr`` / ``frames`` / ``ocr`` / ``asr_correct`` /
   ``chapters`` / ``draft`` / ``imagegen`` / ``render`` / ``longdoc`` / ``verify``
 - longdoc / verify 由 :mod:`longdoc` / :mod:`verify` 提供真函数
-- LE hooks 尚未接入(Phase 5,见 handoff-skeleton-bootstrap §5.2)
+
+W8 状态(2026-07-19):
+- LE L1 执行层接入:``run_stage`` 用 ``timed_stage(logger, stage)`` 替换裸 try/except
+- LE L2 审核层接入:``run_pipeline`` 末尾 ``gatekeeper_check(work)``
+- LE L3 沉淀层接入:``PipelineLogger.finalize()`` 写 ``<work>/pipeline_run.json``
+- LE L4 进化层接入:``post_pipeline_hook(work)`` 扫 Pattern-Key + LLM 健康度
+
+双轨持久化:
+- ``<work>/state.json`` = 调度状态(W4 已有,11 stage + 时间戳 + error)
+- ``<work>/pipeline_run.json`` = LE 沉淀(W8 新增,quality + llm_health + gatekeeper_passed)
 
 核心职责:
 1. 状态机:加载/保存 state.json,跳过已完成 stage
-2. 错误处理:stage 失败 → mark + 抛 + 不吞异常
+2. 错误处理:stage 失败 → mark + 抛 + 不吞异常(LE 也会写 ERRORS.md)
 3. 上下文分发:每 stage 拿到 (inbox, work, config) + 各自的 kwargs
-4. Phase 5 接入 ``logger.timed_stage()`` 替换裸 try/except
+4. LE 收尾:无论成败,finally 块跑 gatekeeper + finalize + post_pipeline_hook
 
 参考:TDD §4.1.3 ``pipeline/runner.py`` 伪代码 +
-     LE 原型 ``_research/le_prototype/runner.py`` 接口约定(Phase 5 接入)。
+     LE 原型 ``_research/le_prototype/runner.py`` 接口约定(已迁移)。
 """
 
 from __future__ import annotations
 
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -25,6 +35,14 @@ from pathlib import Path
 from typing import Any
 
 from ..config import WorkflowConfig
+from ..logger import (
+  GatekeeperResult,
+  PipelineLogger,
+  PipelineRun,
+  gatekeeper_check,
+  post_pipeline_hook,
+  timed_stage,
+)
 from ..state import STAGE_ORDER, StageState, State
 from .asr import transcribe
 from .asr_correct import correct_asr
@@ -187,12 +205,16 @@ class PipelineResult:
     本次 run 中失败的 stage 名(若有)
   duration_seconds : float
     整个 run 耗时
+  pipeline_run : PipelineRun | None
+    LE L3 沉淀层的 :class:`PipelineRun` 对象(``<work>/pipeline_run.json`` 内容),
+    若 LE 写盘失败则为 ``None``
   """
 
   state: State
   completed: list[str]
   failed: list[str]
   duration_seconds: float
+  pipeline_run: PipelineRun | None = None
 
   @property
   def is_success(self) -> bool:
@@ -208,6 +230,7 @@ def run_stage(
   stage: str,
   ctx: StageContext,
   state: State,
+  logger: PipelineLogger | None = None,
 ) -> StageState:
   """执行单个 stage,返回更新后的 :class:`StageState`。
 
@@ -215,8 +238,20 @@ def run_stage(
   - 检查 ``state.is_completed`` → 直接跳过,返回当前 stage_state
   - ``mark(stage, 'running')`` → save
   - 调用 :data:`STAGE_FUNCS`[stage],按 stage 名 + ctx 字段分发参数
+  - 用 LE ``timed_stage(logger, stage)`` 包裹 stage 执行 → 自动写 memory 行 + ERRORS.md(失败时)
   - 成功 → ``mark(stage, 'completed')`` + save
   - 失败 → ``mark(stage, 'failed', error=str)`` + save,异常上抛
+
+  Parameters
+  ----------
+  stage : str
+    stage 名,必须是 :data:`STAGE_ORDER` 之一
+  ctx : StageContext
+    运行时上下文(inbox / work / config / video / img_dir / hint_timestamps)
+  state : State
+    流水线状态机(已落盘或新建)
+  logger : PipelineLogger | None
+    LE L3 沉淀 logger;若 ``None`` → 创建一个临时 logger(向后兼容单独调用 ``run_stage`` 的测试)
   """
   if stage not in STAGE_FUNCS:
     raise KeyError(f"未知 stage: {stage!r}")
@@ -231,8 +266,14 @@ def run_stage(
   _save_state(state, ctx.work)
 
   func = STAGE_FUNCS[stage]
+
+  # 临时 logger(向后兼容单独调用 ``run_stage`` 的测试,不传 logger 时也能跑 LE)
+  if logger is None:
+    logger = PipelineLogger(ctx.work, course=state.course)
+
   try:
-    _invoke_stage(stage, func, ctx)
+    with timed_stage(logger, stage):
+      _invoke_stage(stage, func, ctx)
   except Exception as exc:
     state.mark(stage, "failed", error=_format_error(exc))
     _save_state(state, ctx.work)
@@ -413,7 +454,7 @@ def run_pipeline(
   skip_completed: bool = True,
   stop_after: str | None = None,
 ) -> PipelineResult:
-  """完整流水线入口(W4:全部 11 stage 实装)。
+  """完整流水线入口(W8:11 stage + LE 闭环)。
 
   Parameters
   ----------
@@ -432,14 +473,23 @@ def run_pipeline(
   Returns
   -------
   PipelineResult
-    含最终 State + 完成/失败 stage 列表 + 耗时
+    含最终 State + 完成/失败 stage 列表 + 耗时 + LE PipelineRun
 
   Raises
   ------
   ValueError
     ``inbox`` 缺且 state.json 没记录 inbox_path(从未 ``mtd run`` 启动过)
   Exception
-    任何 stage 失败会上抛(已 mark & save state)
+    任何 stage 失败会上抛(已 mark & save state,LE 也会写 ERRORS.md +
+    ``pipeline_run.json`` 末尾摘要)
+
+  Notes
+  -----
+  LE 收尾顺序(finally 块,无论成败都会跑):
+
+  1. L2 ``gatekeeper_check(work)`` → 检查产物完整性
+  2. L3 ``logger.finalize(gatekeeper_result, llm_health={})`` → 写 ``pipeline_run.json``
+  3. L4 ``post_pipeline_hook(work)`` → 扫 Pattern-Key 晋升 + LLM 健康度评估
   """
   cfg = config or WorkflowConfig()
   work = work.resolve()
@@ -469,39 +519,67 @@ def run_pipeline(
     state.inbox_path = str(inbox)
     state.save(state_path)
 
+  # LE L3 沉淀层:logger(W8 新增)
+  logger = PipelineLogger(work, course=state.course)
+
   # 跳过已完成 stage(默认行为)
   started = time.monotonic()
   completed_now: list[str] = []
   failed_now: list[str] = []
+  pipeline_run: PipelineRun | None = None
 
-  for stage in STAGE_ORDER:
-    if skip_completed and state.stages[stage].is_completed:
+  try:
+    for stage in STAGE_ORDER:
+      if skip_completed and state.stages[stage].is_completed:
+        completed_now.append(stage)
+        if stop_after is not None and stage == stop_after:
+          break
+        continue
+      if state.stages[stage].status == "skipped":
+        if stop_after is not None and stage == stop_after:
+          break
+        continue
+
+      ctx = StageContext(inbox=inbox, work=work, config=cfg)
+      try:
+        run_stage(stage, ctx, state, logger)
+      except Exception:
+        failed_now.append(stage)
+        raise
+
       completed_now.append(stage)
-      if stop_after is not None and stage == stop_after:
-        break
-      continue
-    if state.stages[stage].status == "skipped":
-      if stop_after is not None and stage == stop_after:
-        break
-      continue
 
-    ctx = StageContext(inbox=inbox, work=work, config=cfg)
+      if stop_after is not None and stage == stop_after:
+        break
+  finally:
+    # LE 收尾:L2 审核 + L3 沉淀 + L4 进化(无论成败都跑)
+    gatekeeper: GatekeeperResult | None = None
     try:
-      run_stage(stage, ctx, state)
-    except Exception:
-      failed_now.append(stage)
-      raise
+      gatekeeper = gatekeeper_check(work)
+    except Exception as exc:
+      # gatekeeper 异常不破坏主流程,记录到 stderr
+      print(f"[le] gatekeeper_check failed: {exc}", file=sys.stderr)
 
-    completed_now.append(stage)
+    try:
+      pipeline_run = logger.finalize(
+        gatekeeper_result=gatekeeper,
+        llm_health={},  # TODO(W9+): 跨 stage 累积 LLM provider.health()
+      )
+    except Exception as exc:
+      print(f"[le] logger.finalize failed: {exc}", file=sys.stderr)
 
-    if stop_after is not None and stage == stop_after:
-      break
+    try:
+      post_pipeline_hook(work)
+    except Exception as exc:
+      # post_pipeline_hook 失败不应破坏 run_pipeline 返回
+      print(f"[le] post_pipeline_hook failed: {exc}", file=sys.stderr)
 
   return PipelineResult(
     state=state,
     completed=completed_now,
     failed=failed_now,
     duration_seconds=time.monotonic() - started,
+    pipeline_run=pipeline_run,
   )
 
 

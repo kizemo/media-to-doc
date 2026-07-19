@@ -1,13 +1,16 @@
 """media_to_doc MCP server(stdio JSON-RPC,供 Claude Desktop / Codex 调用)。
 
-W7 状态(2026-07-19):
-- 6 个工具暴露:list_courses / run_pipeline / resume_pipeline /
-  check_status / list_outputs / read_lecture
+W7 + W8 状态(2026-07-19):
+- 8 个工具暴露(W7=6 + W8=2):
+  W7:list_courses / run_pipeline / resume_pipeline /
+      check_status / list_outputs / read_lecture
+  W8:get_run_metrics(LE 元数据)/ list_runs(扫所有 run)
 - 全部 handler 同步 + 日志走 stderr(stdout 留给 JSON-RPC 帧)
 - 错误路径返回 ``isError=True`` 的 :class:`CallToolResult`,不抛异常
 - ``mtd-mcp`` 入口已在 ``pyproject.toml [project.scripts]`` 注册
 
-设计参考:_research/PROJECT_DESCRIPTION.md §6.3 / 任务 9 + 13。
+设计参考:_research/PROJECT_DESCRIPTION.md §6.3 / 任务 9 + 13 +
+              LE 设计 `_research/LE_DESIGN.md` §3.5。
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ from mcp.server import Server
 
 from . import __version__
 from .config import WorkflowConfig
+from .llm.health import get_run_metrics
+from .llm.health import list_runs as llm_list_runs
 from .paths import WORKSPACE_ROOT
 from .pipeline.audio import SUPPORTED_EXTS, find_media
 from .pipeline.runner import PipelineResult, run_pipeline
@@ -48,13 +53,15 @@ server: Server = Server("media-to-doc")
 
 INSTRUCTIONS = (
   "media-to-doc:把本地培训音视频转为带 AI 配图、可独立分发的 Markdown + HTML 讲义。\n"
-  "6 个工具:\n"
+  "8 个工具(W7=6 + W8=2 LE 查询):\n"
   "  - list_courses: 列出 inbox 课程\n"
   "  - run_pipeline: 跑完整流水线\n"
   "  - resume_pipeline: 续跑中断的流水线\n"
   "  - check_status: 查 state.json 进度\n"
   "  - list_outputs: 列出产物文件\n"
-  "  - read_lecture: 读讲义 (raw/cleaned/final 三版本)"
+  "  - read_lecture: 读讲义 (raw/cleaned/final 三版本)\n"
+  "  - get_run_metrics: 读单课程 LE 元数据(state + pipeline_run + errors)\n"
+  "  - list_runs: 扫 workspace 所有 run 摘要(含跨 run LLM 健康度)"
 )
 
 
@@ -525,6 +532,51 @@ def tool_read_lecture(
 
 
 # ─────────────────────────────────────────────────────────────
+# W8 LE 元数据查询工具(get_run_metrics / list_runs)
+# ─────────────────────────────────────────────────────────────
+
+
+def tool_get_run_metrics(work_dir: str) -> dict[str, Any]:
+  """读单个课程的 LE 元数据(只读)。
+
+  Parameters
+  ----------
+  work_dir : str
+    work 目录(必填,含 ``state.json`` + ``pipeline_run.json``)
+
+  Returns
+  -------
+  dict
+    含 ``course`` / ``inbox_path`` / ``state`` (11 stage 调度状态) /
+    ``pipeline_run`` (LE 沉淀 + quality + llm_health + gatekeeper_passed) /
+    ``errors`` (Pattern-Key 列表)
+  """
+  return get_run_metrics(work_dir)
+
+
+def tool_list_runs(
+  workspace_root: str | None = None,
+  limit: int = 20,
+) -> dict[str, Any]:
+  """扫 workspace 下所有 run,按 mtime 倒序返回摘要(只读)。
+
+  Parameters
+  ----------
+  workspace_root : str | None
+    workspace 根(默认全局 :data:`WORKSPACE_ROOT`)
+  limit : int
+    最多返回多少 run(默认 20)
+
+  Returns
+  -------
+  dict
+    含 ``workspace`` / ``work_root`` / ``total_runs`` / ``runs`` /
+    ``llm_health_global``(跨 run 的 LLM 失败率统计)
+  """
+  return llm_list_runs(workspace_root, limit=limit)
+
+
+# ─────────────────────────────────────────────────────────────
 # inbox 隔离 helpers(从 cli.py 复用,避免循环 import)
 # ─────────────────────────────────────────────────────────────
 
@@ -591,7 +643,7 @@ def _restore_isolated(
 
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
-  """注册 6 个 MCP 工具。"""
+  """注册 8 个 MCP 工具(W7=6 + W8=2 LE 查询)。"""
   return [
     types.Tool(
       name="list_courses",
@@ -747,6 +799,48 @@ async def handle_list_tools() -> list[types.Tool]:
       },
       annotations=types.ToolAnnotations(readOnlyHint=True),
     ),
+    # ── W8 LE 元数据查询(只读) ─────────────────────────
+    types.Tool(
+      name="get_run_metrics",
+      description=(
+        "读单个课程的 LE 沉淀元数据(state + pipeline_run + quality + "
+        "llm_health + errors)"
+      ),
+      inputSchema={
+        "type": "object",
+        "properties": {
+          "work_dir": {
+            "type": "string",
+            "description": "work 目录(必填,含 state.json + pipeline_run.json)",
+          },
+        },
+        "required": ["work_dir"],
+        "additionalProperties": False,
+      },
+      annotations=types.ToolAnnotations(readOnlyHint=True),
+    ),
+    types.Tool(
+      name="list_runs",
+      description=(
+        "扫 workspace 下所有 run,按 mtime 倒序返回摘要(含跨 run LLM 健康度)"
+      ),
+      inputSchema={
+        "type": "object",
+        "properties": {
+          "workspace_root": {
+            "type": "string",
+            "description": "workspace 根(省略时用全局默认)",
+          },
+          "limit": {
+            "type": "integer",
+            "default": 20,
+            "description": "最多返回多少 run(默认 20)",
+          },
+        },
+        "additionalProperties": False,
+      },
+      annotations=types.ToolAnnotations(readOnlyHint=True),
+    ),
   ]
 
 
@@ -769,6 +863,10 @@ async def handle_call_tool(
       payload = tool_list_outputs(**args)
     elif name == "read_lecture":
       payload = tool_read_lecture(**args)
+    elif name == "get_run_metrics":
+      payload = tool_get_run_metrics(**args)
+    elif name == "list_runs":
+      payload = tool_list_runs(**args)
     else:
       raise ValueError(f"未知工具: {name!r}")
     return [types.TextContent(type="text", text=_json_dumps(payload))]
@@ -826,5 +924,7 @@ __all__ = [
   "tool_check_status",
   "tool_list_outputs",
   "tool_read_lecture",
+  "tool_get_run_metrics",
+  "tool_list_runs",
   "main",
 ]

@@ -27,6 +27,13 @@ from .base import (
   HealthReport,
   HealthStatus,
 )
+
+# W8 LE 健康度查询入口
+from .health import (
+  get_escalated_errors,
+  get_run_metrics,
+  list_runs,
+)
 from .openai_compat import OpenAICompatProvider
 
 __all__ = [
@@ -38,6 +45,10 @@ __all__ = [
   "PROVIDERS",
   "get_provider",
   "register_provider",
+  # LE health queries (W8)
+  "get_run_metrics",
+  "list_runs",
+  "get_escalated_errors",
 ]
 
 

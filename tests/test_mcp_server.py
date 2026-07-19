@@ -462,17 +462,21 @@ def test_read_lecture_file_missing(tmp_path: Path) -> None:
 # ─────────────────────────────────────────────────────────────
 
 
-def test_list_tools_returns_six() -> None:
-  """handle_list_tools 返回 6 个 Tool,带 readOnlyHint 标注。"""
+def test_list_tools_returns_eight() -> None:
+  """handle_list_tools 返回 8 个 Tool(W7=6 + W8=2),带 readOnlyHint 标注。"""
   tools = asyncio.run(mcp_server.handle_list_tools())
   names = {t.name for t in tools}
   assert names == {
     "list_courses", "run_pipeline", "resume_pipeline",
     "check_status", "list_outputs", "read_lecture",
+    "get_run_metrics", "list_runs",
   }
-  # 4 个 read-only 工具
+  # 6 个 read-only 工具(W7=4 + W8=2)
   read_only = {t.name for t in tools if t.annotations and t.annotations.readOnlyHint}
-  assert read_only == {"list_courses", "check_status", "list_outputs", "read_lecture"}
+  assert read_only == {
+    "list_courses", "check_status", "list_outputs", "read_lecture",
+    "get_run_metrics", "list_runs",
+  }
   # 全部有 inputSchema
   assert all(t.inputSchema.get("type") == "object" for t in tools)
 
@@ -553,3 +557,113 @@ def test_mtd_mcp_command_invokes_server(
   monkeypatch.setattr("media_to_doc.mcp_server.main", fake_main)
   CliRunner().invoke(app, ["mcp"])
   assert called["ok"] is True
+
+
+# ─────────────────────────────────────────────────────────────
+# W8 LE 元数据查询工具(get_run_metrics / list_runs)
+# ─────────────────────────────────────────────────────────────
+
+
+def _make_work_with_le_artifacts(
+  work: Path,
+  course: str = "le-course",
+  *,
+  gatekeeper_passed: bool = True,
+) -> None:
+  """创建合规的 state.json + pipeline_run.json + ERRORS.md(W8 LE 工具测试用)。"""
+  work.mkdir(parents=True, exist_ok=True)
+  _make_work_with_state(work, course=course)
+  run = {
+    "course": course,
+    "started_at": "2026-07-19T10:00:00",
+    "finished_at": "2026-07-19T10:02:00",
+    "duration_seconds": 120.0,
+    "stages": [],
+    "quality": {
+      "total_stages": 11, "completed": 11, "failed": 0, "skipped": 0,
+      "completion_rate": 1.0, "total_duration_seconds": 120.0,
+    },
+    "llm_health": {"ollama": {"calls": 5, "failures": 0}},
+    "gatekeeper_passed": gatekeeper_passed,
+  }
+  (work / "pipeline_run.json").write_text(
+    json.dumps(run), encoding="utf-8",
+  )
+
+
+class TestGetRunMetrics:
+  def test_tool_get_run_metrics_returns_combined(
+    self, tmp_path: Path,
+  ) -> None:
+    """tool_get_run_metrics 返回 state + pipeline_run + errors 综合元数据。"""
+    work = tmp_path / "work"
+    _make_work_with_le_artifacts(work)
+    payload = mcp_server.tool_get_run_metrics(work_dir=str(work))
+    assert payload["course"] == "le-course"
+    assert "state" in payload
+    assert "pipeline_run" in payload
+    assert "errors" in payload
+    assert payload["pipeline_run"]["gatekeeper_passed"] is True
+
+  def test_tool_get_run_metrics_missing_state(
+    self, tmp_path: Path,
+  ) -> None:
+    """state.json 不存在 → FileNotFoundError(透传给 MCP handler)。"""
+    with pytest.raises(FileNotFoundError, match="state.json"):
+      mcp_server.tool_get_run_metrics(work_dir=str(tmp_path))
+
+  def test_handle_call_tool_dispatches_get_run_metrics(
+    self, tmp_path: Path,
+  ) -> None:
+    """handle_call_tool 正确分发 get_run_metrics 工具。"""
+    work = tmp_path / "work"
+    _make_work_with_le_artifacts(work)
+    result = asyncio.run(mcp_server.handle_call_tool(
+      "get_run_metrics", {"work_dir": str(work)},
+    ))
+    parsed = json.loads(result[0].text)
+    assert parsed["course"] == "le-course"
+    assert "pipeline_run" in parsed
+
+
+class TestListRuns:
+  def test_tool_list_runs_empty_workspace(
+    self, tmp_path: Path,
+  ) -> None:
+    """空 workspace → total_runs=0,runs=[]。"""
+    ws = tmp_path / "empty_ws"
+    ws.mkdir()
+    payload = mcp_server.tool_list_runs(workspace_root=str(ws))
+    assert payload["total_runs"] == 0
+    assert payload["runs"] == []
+
+  def test_tool_list_runs_with_multiple_runs(
+    self, tmp_path: Path,
+  ) -> None:
+    """多 run 时按 mtime 倒序返回摘要。"""
+    ws = tmp_path / "ws"
+    work_root = ws / "work"
+    for course in ("c1", "c2"):
+      _make_work_with_le_artifacts(
+        work_root / course, course=course,
+        gatekeeper_passed=(course == "c2"),
+      )
+    payload = mcp_server.tool_list_runs(workspace_root=str(ws))
+    assert payload["total_runs"] == 2
+    assert len(payload["runs"]) == 2
+    # 含 llm_health_global 聚合
+    assert "llm_health_global" in payload
+    assert payload["llm_health_global"]["total_llm_calls"] == 10
+
+  def test_handle_call_tool_dispatches_list_runs(
+    self, tmp_path: Path,
+  ) -> None:
+    """handle_call_tool 正确分发 list_runs 工具。"""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = asyncio.run(mcp_server.handle_call_tool(
+      "list_runs", {"workspace_root": str(ws)},
+    ))
+    parsed = json.loads(result[0].text)
+    assert parsed["total_runs"] == 0
+    assert "llm_health_global" in parsed
