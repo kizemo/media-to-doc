@@ -406,25 +406,26 @@ def _save_state(state: State, work: Path) -> None:
 
 
 def run_pipeline(
-  inbox: Path,
+  inbox: Path | None,
   work: Path,
   config: WorkflowConfig | None = None,
   *,
   skip_completed: bool = True,
   stop_after: str | None = None,
 ) -> PipelineResult:
-  """完整流水线入口(W3:audio → render,后 2 stage 待 W4 实装)。
+  """完整流水线入口(W4:全部 11 stage 实装)。
 
   Parameters
   ----------
-  inbox : Path
-    源 inbox 目录(含原始音视频)
+  inbox : Path | None
+    源 inbox 目录(含原始音视频)。``None`` 时从 ``work/state.json`` 的
+    :attr:`State.inbox_path` 派生(W6 起,resume 默认行为)
   work : Path
     中间产物目录(将创建 ``state.json``,各 stage 输出目录)
   config : WorkflowConfig | None
     配置,默认使用 :class:`WorkflowConfig` 默认值
   skip_completed : bool
-    是否跳过已完成 stage(``mtd resume`` 用 ``False`` 表示强制重跑)
+    是否跳过已完成 stage(``mtd resume --force`` 用 ``False`` 表示强制重跑)
   stop_after : str | None
     指定 stage 名 → 跑到该 stage 后停下(便于调试)
 
@@ -435,24 +436,38 @@ def run_pipeline(
 
   Raises
   ------
-  NotImplementedError
-    W3 跑过 render 后再跑下游 stage 会抛
+  ValueError
+    ``inbox`` 缺且 state.json 没记录 inbox_path(从未 ``mtd run`` 启动过)
   Exception
     任何 stage 失败会上抛(已 mark & save state)
   """
   cfg = config or WorkflowConfig()
-  inbox = inbox.resolve()
   work = work.resolve()
-
   work.mkdir(parents=True, exist_ok=True)
 
-  # 加载或初始化 state
+  # 加载或初始化 state(必须在 inbox 派生前;state 可能含 inbox_path)
   state_path = work / "state.json"
+  state: State
   if state_path.exists():
     state = State.load(state_path)
   else:
-    course_name = _derive_course_name(inbox, work)
-    state = State.new(course=course_name)
+    state = State.new(course=_derive_course_name(inbox, work))
+
+  # inbox 派生:inbox=None → 从 state.inbox_path 读
+  if inbox is None:
+    if state.inbox_path:
+      inbox = Path(state.inbox_path)
+    else:
+      raise ValueError(
+        "inbox 缺省且 state.json 未记录 inbox_path;"
+        "首次跑请用 ``mtd run <inbox_dir>`` 而非 ``mtd resume``"
+      )
+  inbox = inbox.resolve()
+
+  # 写回 inbox_path(W6 起 state 自带此字段,resume 不传 inbox 也能复用)
+  if state.inbox_path != str(inbox):
+    state.inbox_path = str(inbox)
+    state.save(state_path)
 
   # 跳过已完成 stage(默认行为)
   started = time.monotonic()

@@ -160,12 +160,12 @@ def test_cli_paths() -> None:
 
 
 def test_cli_run_not_implemented(tmp_path: Path) -> None:
-  """``mtd run`` 尚未实装(Phase 1),必须返回非零退出码。"""
+  """``mtd run`` 已实装(W6):用空 inbox 触发友好错误(exit code 2)。"""
   inbox = tmp_path / "inbox"
   inbox.mkdir()
   result = runner.invoke(cli.app, ["run", str(inbox)])
-  assert result.exit_code == 1
-  assert "尚未实装" in result.stdout or "Phase 1" in result.stdout
+  # inbox 无媒体 → exit 2 + 友好提示
+  assert result.exit_code == 2
 
 
 # ─────────────────────────────────────────────────────────────

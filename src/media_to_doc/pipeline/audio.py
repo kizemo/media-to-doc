@@ -42,12 +42,17 @@ SUPPORTED_EXTS: tuple[str, ...] = SUPPORTED_VIDEO_EXTS + SUPPORTED_AUDIO_EXTS
 # ─────────────────────────────────────────────────────────────
 
 
-def find_media(inbox: Path) -> Path:
+def find_media(inbox: Path, *, exclude_dirs: list[Path] | None = None) -> Path:
   """在 inbox 下找到第一个支持的媒体文件。
 
   找不到抛 ``FileNotFoundError``(给 runner 清晰的退出信息)。
+
+  Parameters
+  ----------
+  exclude_dirs : list[Path] | None
+    排除这些目录下的文件(典型用法:work_dir 自身在 inbox 内时排除流水线产物)
   """
-  candidates = _collect_media_files(inbox)
+  candidates = _collect_media_files(inbox, exclude_dirs=exclude_dirs)
   if not candidates:
     raise FileNotFoundError(
       f"在 {inbox} 下未找到支持的媒体文件"
@@ -56,13 +61,24 @@ def find_media(inbox: Path) -> Path:
   return candidates[0]
 
 
-def _collect_media_files(inbox: Path) -> list[Path]:
+def _collect_media_files(
+  inbox: Path,
+  *,
+  exclude_dirs: list[Path] | None = None,
+) -> list[Path]:
   """深度遍历 inbox 收集候选文件,按路径排序(稳定顺序便于测试)。"""
   if not inbox.exists():
     return []
+  exclude_resolved: list[Path] = [
+    d.resolve() for d in (exclude_dirs or [])
+  ]
   candidates: list[Path] = []
   for path in sorted(inbox.rglob("*")):
     if path.is_file() and path.suffix.lower() in SUPPORTED_EXTS:
+      if exclude_resolved and any(
+        path.resolve().is_relative_to(excl) for excl in exclude_resolved
+      ):
+        continue
       candidates.append(path)
   return candidates
 

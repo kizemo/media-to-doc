@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-19(Phase 1 W5 完成 — 端到端冒烟跑通)
+最后更新:2026-07-19(Phase 1 W5 完成 — 端到端冒烟跑通;W6 CLI 实装)
 
 ---
 
@@ -70,8 +70,8 @@
 ## Phase 4 — 跨项目可调用(L1)
 
 - [ ] `__init__.py` 顶层 re-export + lazy import(PEP 562),重依赖按需加载
-- [ ] `cli.py` `media-to-doc run <inbox>` / `media-to-doc resume <work>` 命令
-- [ ] `pyproject.toml` `[project.scripts]` 注册 CLI 入口
+- [x] `cli.py` `media-to-doc run <inbox>` / `media-to-doc resume <work>` 命令 — **W6 完成**
+- [ ] `pyproject.toml` `[project.scripts]` 注册 CLI 入口(已注册 `mtd`,验证 OK)
 - [ ] `mcp_server.py` stdio MCP server,6 个工具:
   - [ ] `list_courses(workspace_root)`
   - [ ] `run_pipeline(inbox_dir, workspace_root)`
@@ -80,6 +80,7 @@
   - [ ] `list_outputs(inbox_dir)`
   - [ ] `read_lecture(inbox_dir, version, fmt)` — 支持 `raw/cleaned/final`
 - [ ] Claude Desktop 配置文档
+- [x] `cli.py` `mtd status` / `mtd list` 命令 — **W6 完成**
 
 ---
 
@@ -335,4 +336,29 @@
   - **B. Phase 2 L2 LE 闭环**(迁移 `_research/le_prototype/`)— 1.5-2h,基础设施
   - **C. CLI `mtd run`/`resume`**(11 stage 已就位,W5 smoke 验证过端到端)— 1h,最直接 win
   - **D. MCP server 接入**(6 工具 + Claude Desktop 配置)— 2-3h,产品价值最大
+
+### 会话 11 — Phase 4 W6 CLI 实装(2026-07-19,~1.5h)
+
+- 完成任务(ROADMAP Phase 4 W6 全完成):
+  - 分支:`feat/cli-w6-run-resume`(基于 W5)
+  - `src/media_to_doc/state.py`:加 `inbox_path: str | None = None` 字段(to_dict 同步)+ 让 resume 不必传 inbox
+  - `src/media_to_doc/pipeline/runner.py`:`run_pipeline(inbox: Path | None, ...)` — inbox=None 时从 state.inbox_path 派生,自动写回
+  - `src/media_to_doc/pipeline/audio.py`:`find_media(exclude_dirs=...)` — 让 CLI 在 work_dir 在 inbox 内时正确选目标视频
+  - `src/media_to_doc/cli.py`:实装 4 条命令
+    - `mtd run <inbox>`:`--work-dir`/`--llm`/`--llm-model`/`--imagegen`/`--longdoc-llm`/`--no-longdoc`/`--stop-after`/`--force`/`--no-isolate`/`--json`
+    - `mtd resume <work>`:`--inbox`/`--force`/`--stop-after`/`--json`(默认从 state.json 派生)
+    - `mtd status <work>`:`--json`(只读)
+    - `mtd list [--workspace]`:`--json`(扫 inbox 子目录 + 媒体文件)
+    - inbox 自动隔离 helper(从 smoke runner 抽出 + `--no-isolate` opt-out)
+    - `eprint()` helper(走 stdout,绕开 Typer CliRunner 的 stderr 捕获限制)
+  - `tests/test_cli.py`:21 用例覆盖全部 4 命令
+- 测试:`uv run pytest` 349 → **370 passed**(+21),3 skip 不变
+- ruff:All checks passed
+- 端到端:`uv run mtd --version` / `mtd list` / `mtd list --json` / `mtd resume` 验证 OK
+- 关键决策:
+  - **resume 不必传 inbox**:state.inbox_path 持久化,`run_pipeline(inbox=None)` 自动派生
+  - **JSON 输出绕开 Rich markup**:`sys.stdout.write(_json.dumps(...))` 而非 `console.print(json_str)`(Rich 把 `[...]` 当 markup 解析破坏 JSON)
+  - **eprint 走 stdout**:Typer 0.12+ CliRunner 不支持 mix_stderr,让 eprint 走 stdout 便于测试 + MCP + 管道一致捕获
+- W6 commit:`feat(cli): W6 — mtd run/resume/status/list with inbox isolation + JSON output`
+- 下次会话第一句:承接 `handoff-pipeline-w6-cli-2026-07-19.md`,启动 W7(MCP server 或 LE 闭环):
 - **推荐排序**:C → D → B(W6=C CLI,W7=D MCP,W8=B LE)

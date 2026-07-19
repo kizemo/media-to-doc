@@ -81,6 +81,8 @@ class State:
   updated_at: str  # ISO 格式
   current_stage: str | None = None
   stages: dict[str, StageState] = field(default_factory=dict)
+  # 源 inbox 绝对路径(W6 写入,resume 时不传 inbox 也能派生)
+  inbox_path: str | None = None
 
   # ── 构造 ────────────────────────────────────────────────
 
@@ -140,6 +142,7 @@ class State:
       "started_at": self.started_at,
       "updated_at": self.updated_at,
       "current_stage": self.current_stage,
+      "inbox_path": self.inbox_path,
       "stages": {name: stage.to_dict() for name, stage in self.stages.items()},
     }
 
