@@ -172,7 +172,16 @@
   - [x] RELEASE_NOTES_v1.0.0.md 加 Install 章节
   - [x] handoff:`handoff-pipeline-w12-pypi-2026-07-20.md`
   - [x] commit:`docs(pipeline): W12-A — publish media_to_doc 1.0.0 to PyPI`(待 commit)
-  - [ ] **B. GitHub release 真实发布**:push + `gh release create v1.0.0 --notes-file ...`(待用户配 git remote)
+  - [x] **B. GitHub release 真实发布** — **W12-B 完成**
+  - [x] GitHub repo `kizemo/media-to-doc` 创建(public, description + homepage)
+  - [x] HTTPS git push SSL EOF(公司 VPN)→ 切 SSH 协议
+  - [x] `release/v1.0` → `main` push + tag `v1.0.0` push
+  - [x] `gh release create v1.0.0` 踩坑:`--target` 期望 branch name(非 commit sha)
+  - [x] Release URL:https://github.com/kizemo/media-to-doc/releases/tag/v1.0.0
+  - [x] 2 assets 上传:wheel (121K) + sdist (497K),SHA256 verified
+  - [x] pyproject.toml [project.urls] 6 条实 URL + CHANGELOG.md compare links 更新
+  - [x] handoff:`handoff-pipeline-w12-github-release-2026-07-20.md`
+  - [x] commit:`docs(pipeline): W12-B — GitHub Release v1.0.0 + real project URLs`(待 commit)
   - [ ] **E. v1.0.1 patch**:修 W11-C §4 标记的 2 个 HTML 渲染降级(mermaid 流程图 / GFM task list)
 
 ---

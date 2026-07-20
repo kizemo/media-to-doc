@@ -113,12 +113,15 @@ mtd = "media_to_doc.cli:app"
 mtd-mcp = "media_to_doc.mcp_server:main"
 
 # ─────────────────────────────────────────────────────────────
-# 项目 URL(Phase 6 发布后填真实地址)
+# 项目 URL(W12-B 上线后实配)
 # ─────────────────────────────────────────────────────────────
 [project.urls]
-"Homepage" = "https://github.com/media-to-doc/media-to-doc"
-"Bug Tracker" = "https://github.com/media-to-doc/media-to-doc/issues"
-"Documentation" = "https://github.com/media-to-doc/media-to-doc#documentation"
+"Homepage" = "https://github.com/kizemo/media-to-doc"
+"Bug Tracker" = "https://github.com/kizemo/media-to-doc/issues"
+"Documentation" = "https://github.com/kizemo/media-to-doc#readme"
+"Changelog" = "https://github.com/kizemo/media-to-doc/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/kizemo/media-to-doc/releases/tag/v1.0.0"
+"PyPI" = "https://pypi.org/project/media-to-doc/"
 
 # ─────────────────────────────────────────────────────────────
 # 构建系统:hatchling + src/ 布局
