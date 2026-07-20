@@ -3,10 +3,10 @@
 > 把本地音视频(培训录像、讲座录音、运营课、电商课)一键转化为**带 AI 配图、可独立分发**的
 > Markdown + HTML 讲义。
 
-[![Status: v0.1.0-dev](https://img.shields.io/badge/status-v0.1.0--dev-yellow)]()
+[![Status: v1.0.0](https://img.shields.io/badge/status-v1.0.0-brightgreen)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Python: 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)]()
-[![Tests: 508 passed](https://img.shields.io/badge/tests-508%20passed-green)]()
+[![Tests: 529 passed](https://img.shields.io/badge/tests-529%20passed-green)]()
 
 ---
 
@@ -47,10 +47,10 @@ uv sync --all-extras
 
 ```bash
 uv run mtd --version
-# 期望:media-to-doc 0.1.0
+# 期望:media-to-doc 1.0.0
 
 uv run pytest
-# 期望:508 passed / 0 skipped
+# 期望:529 passed / 0 skipped
 ```
 
 ### 3. 跑一条流水线

@@ -52,7 +52,24 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+# 动态从安装元数据读版本(随 pyproject.toml 自动同步;uv / pip 安装后可用)
+try:
+  from importlib.metadata import version as _pkg_version
+
+  __version__ = _pkg_version("media_to_doc")
+except Exception:  # pragma: no cover — dev editable install fallback
+  # 源码直接 ``import media_to_doc`` 而未安装时(开发模式),fallback 到 pyproject
+  from pathlib import Path as _Path
+
+  _pyproject = _Path(__file__).resolve().parents[2] / "pyproject.toml"
+  if _pyproject.exists():
+    import re as _re
+
+    _m = _re.search(r'^version\s*=\s*"([^"]+)"', _pyproject.read_text(encoding="utf-8"), _re.MULTILINE)
+    __version__ = _m.group(1) if _m else "1.0.0"
+  else:
+    __version__ = "1.0.0"
+
 __author__ = "Duanyi"
 __license__ = "MIT"
 
