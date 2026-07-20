@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-19(Phase 0 ~ Phase 6 + 7 + 10 全部完成;**W11-A Gatekeeper vs Verify 一致性修复完成**;529 测试 / 0 skip)
+最后更新:2026-07-20(Phase 0 ~ Phase 6 + 7 + 10 + 11 全部完成;**W11-B v1.0.0 GA release 完成**;529 测试 / 0 skip;tag v1.0.0)
 
 ---
 
@@ -136,8 +136,24 @@
   - [x] 新增 `scripts/_w11a_consistency.py`(可复用 3-way exit 验收工具:0=PASS / 1=both FAIL / 2=inconsistent → regression)
   - [x] commit:`fix(pipeline): W11-A — align gatekeeper path resolution with verify layout`(`d2b39d3`)
   - [x] handoff:`handoff-pipeline-w11-gatekeeper-2026-07-19.md`
-- [ ] **W11-B v1.0 release prep**:CHANGELOG + docs/installation.md + pyproject urls + uv build + gh release create --draft(2-3h)
-- [ ] **W11-C 长视频 + 真 LLM 文档质量验收**:同 03.mp4 跑 longdoc active 净化 + 看讲师视角讲义质量(3-4h 真跑)
+- [x] **W11-B v1.0 release prep** — **W11-B 完成** (`9cddcf2` + `v1.0.0` tag)
+  - [x] pyproject version 0.1.0 → 1.0.0 + Development Status 3-Alpha → 5-Production/Stable
+  - [x] classifier 补全:multi-OS / Intended Audience / Topic
+  - [x] `__version__` 改动态 `importlib.metadata.version` + pyproject fallback
+  - [x] test_smoke.py 3 处版本断言同步
+  - [x] README badge 1.0.0 / 529 tests + 5 分钟快速开始期望版本同步
+  - [x] CHANGELOG.md (Keep a Changelog 1.1,W0-W11 里程碑)
+  - [x] docs/installation.md (各 OS / CUDA / 中国网络 / Claude Desktop / 故障排除)
+  - [x] docs/RELEASE_NOTES_v1.0.0.md (gh release form 可粘贴)
+  - [x] `uv build` 成功打 wheel(122KB)+ sdist(508KB);33 .py 模块,7 extras,milti-OS
+  - [x] wheel 装后 `mtd --version` → `media-to-doc 1.0.0`
+  - [x] 测试 + ruff 三件套:529 passed / 0 skipped / All checks passed
+  - [x] commit:`docs(release): W11-B — v1.0.0 release prep`(`9cddcf2`)
+  - [x] tag:annotated `v1.0.0`(带 release notes)
+  - [x] 分支:`release/v1.0`(从 `b410e84` 拉)
+  - [x] handoff:`handoff-pipeline-w11-release-2026-07-20.md`
+  - [ ] 用户决策:`gh release create v1.0.0` + push + 上 PyPI(等 GitHub repo 创建)
+- [ ] **W11-C 长视频 + 真 LLM 文档质量验收**:同 03.mp4 跑 longdoc active 净化 + 看讲师视角讲义质量(3-4h 真跑,需用户授权突破 session 上限)
 
 ---
 
@@ -606,3 +622,32 @@
   - **W11-B v1.0 release prep**(2-3h):CHANGELOG + docs/installation.md + pyproject urls + `uv build` + `gh release create v1.0.0 --draft`
   - **W11-C 长视频 + 真 LLM 文档质量验收**(3-4h 真跑):同 03.mp4 跑 longdoc active 净化 + 看讲师视角讲义质量
   - 推荐:**先 W11-B release(Gatekeeper 已修干净,可放心打 tag)→ 再 W11-C 真质量验收**
+
+### 会话 18 — Phase 11 W11-B v1.0.0 Release Prep(2026-07-20,~45min)
+
+- 完成任务(W11-B 主目标完全达成 ✅,用户要求"开始 W11-B"+"完成后执行 W11-C"):
+  - 分支:`release/v1.0`(从 W11-A `b410e84` 拉)
+  - pyproject version **0.1.0 → 1.0.0** + Development Status **3-Alpha → 5-Production/Stable** + multi-OS/Education/Topic 分类
+  - `__version__` 改 **动态** `importlib.metadata.version("media_to_doc")` + pyproject regex fallback;改一处全链路同步
+  - test_smoke.py 3 处版本断言同步用 `__version__` 变量
+  - README badge 1.0.0 / 529 tests + 5 分钟快速开始期望版本同步
+  - **CHANGELOG.md**(新建)— Keep a Changelog 1.1,W0-W11 里程碑 / bug fix / 性能数据
+  - **docs/installation.md**(新建)— Windows/macOS/Linux / CUDA / 中国网络 / Ollama / Claude Desktop / 故障排除
+  - **docs/RELEASE_NOTES_v1.0.0.md**(新建)— gh release form 可粘贴的 release notes
+  - **uv build 三件套**:wheel 122KB + sdist 508KB / 33 .py 模块 / 7 extras / METADATA 全字段正确 / wheel 装后 `mtd --version` → `1.0.0` / W10-A 真跑产物 `_w11a_consistency.py` 仍 PASS
+  - 测试:529 passed / 0 skipped,ruff clean
+  - commit `docs(release): W11-B — v1.0.0 release prep`(`9cddcf2`)
+  - **annotated tag v1.0.0**(带 release notes + Co-Authored-By)
+- 关键设计:
+  - **`__version__` 单一真相源放 pyproject**:`__init__.py` 优先 `importlib.metadata` 读 wheel METADATA,fallback 读 pyproject regex,改一处全链路同步
+  - **multi-OS classifier 一次补齐**:Windows / macOS / Linux 全标 + Intended Audience Education + Topic Office/Business(讲义场景主线)
+  - **`uv build` 验证而非 dry-run**:实际打 wheel + sdist,确保 hatchling + src layout + pyproject 字段完整,可推到 PyPI
+  - **RELEASE_NOTES_v1.0.0.md 而不是 changelog form 复用**:gh release form 不接受 CHANGELOG.md 直接粘贴(太长),单独写 release notes
+- 撞墙 / 修正:
+  - **第一次 `uv build` 装包后 `mtd --version` 仍报 0.1.0**:发现 `__init__.py:55` 写死 `__version__ = "0.1.0"`(W0 占位),pyproject 改 1.0.0 没生效 → 改成 `importlib.metadata.version()` 动态读 + pyproject regex fallback → rebuild + reinstall 后 `1.0.0`
+  - **test_smoke.py 3 处 "0.1.0" 硬编码断言**:升级时漏掉 → pytest 3 失败 → 改用 `__version__` 动态变量(W11-B 修)
+  - **`dist/` 不在 .gitignore**:已查 `.gitignore` line 14 有 `dist/`,不会被 commit;OK
+- W11-B commit:
+  - `9cddcf2 docs(release): W11-B — v1.0.0 release prep`
+  - tag `v1.0.0`(annotated,本地未 push)
+- 下次会话第一句话:承接 W11-B handoff,开始 W11-C 真分布式文档质量验收——**等用户授权 4h 突破 session 上限后才能跑 longdoc active**,或者用户决定 B/C 选项先打 GA tag / 写 CLAUDE.md §10 后续规划更新
