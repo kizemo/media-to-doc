@@ -424,3 +424,158 @@ def test_long_doc_result_save_manifest(tmp_path: Path) -> None:
   assert data["video"] == "x"
   assert data["provider"] == "skip"
   assert data["stats"]["chunks_total"] == 1
+
+
+# ─────────────────────────────────────────────────────────────
+# v1.0.1:HTML 后处理 — mermaid 围栏 + GFM tasklist
+# ─────────────────────────────────────────────────────────────
+
+
+def _make_soup(html: str):
+  """import 局部化,避免顶层 bs4 依赖。"""
+  from bs4 import BeautifulSoup
+
+  return BeautifulSoup(html, "lxml")
+
+
+def test_post_process_mermaid_block_gets_class() -> None:
+  """```mermaid 围栏 → ``<pre class="mermaid">`` 含原文。"""
+  html = '<pre><code class="language-mermaid">flowchart TD\n  A--&gt;B\n</code></pre>'
+  soup = _make_soup(html)
+  ld._post_process_html(soup)
+  pre = soup.find("pre")
+  assert pre is not None
+  # BeautifulSoup 单值 class 返回 str,多值返回 list
+  cls = pre.get("class") or ""
+  assert "mermaid" in (cls if isinstance(cls, list) else [cls])
+  # <code> 应被移除,文本直接在 <pre> 里(get_text() 自动 unescape)
+  assert pre.find("code") is None
+  assert "flowchart TD" in pre.get_text()
+  assert "A-->B" in pre.get_text()
+
+
+def test_post_process_mermaid_block_alternate_class() -> None:
+  """```mermaid 围栏 → ``class="mermaid"``(部分 markdown 扩展使用)。"""
+  html = '<pre><code class="mermaid">graph LR\n  X--&gt;Y\n</code></pre>'
+  soup = _make_soup(html)
+  ld._post_process_html(soup)
+  pre = soup.find("pre")
+  assert pre is not None
+  assert "mermaid" in pre.get("class", [])
+  assert "graph LR" in pre.get_text()
+
+
+def test_post_process_non_mermaid_pre_untouched() -> None:
+  """普通代码块不应被改。"""
+  html = '<pre><code class="language-python">print("hi")\n</code></pre>'
+  soup = _make_soup(html)
+  ld._post_process_html(soup)
+  pre = soup.find("pre")
+  assert pre is not None
+  assert pre.get("class") is None  # 没改 class
+  code = pre.find("code")
+  assert code is not None
+  assert code.get("class") == ["language-python"]
+
+
+def test_post_process_tasklist_unchecked_to_checkbox() -> None:
+  """``- [ ] xxx`` → ``<li><input type="checkbox" disabled> xxx</li>``。"""
+  html = "<ul><li>[ ] 未完成任务</li></ul>"
+  soup = _make_soup(html)
+  ld._post_process_html(soup)
+  li = soup.find("li")
+  assert li is not None
+  checkbox = li.find("input", {"type": "checkbox"})
+  assert checkbox is not None
+  assert checkbox.has_attr("disabled")
+  assert not checkbox.has_attr("checked")
+  assert "未完成任务" in li.get_text()
+
+
+def test_post_process_tasklist_checked_to_checkbox() -> None:
+  """``- [x] xxx`` → ``<li><input type="checkbox" checked disabled> xxx</li>``。"""
+  html = "<ul><li>[x] 已完成任务</li><li>[X] 大写也算</li></ul>"
+  soup = _make_soup(html)
+  ld._post_process_html(soup)
+  items = soup.find_all("li")
+  for li in items:
+    checkbox = li.find("input", {"type": "checkbox"})
+    assert checkbox is not None
+    assert checkbox.has_attr("checked")
+    assert checkbox.has_attr("disabled")
+
+
+def test_post_process_ordered_list_tasklist() -> None:
+  """W11-C 实测形式:``1. [ ] xxx`` → checkbox。"""
+  html = (
+    "<ol>"
+    "<li>[ ] 风险 A</li>"
+    "<li>[x] 风险 B</li>"
+    "</ol>"
+  )
+  soup = _make_soup(html)
+  ld._post_process_html(soup)
+  items = soup.find_all("li")
+  assert len(items) == 2
+  # 第一个未勾选
+  cb0 = items[0].find("input", {"type": "checkbox"})
+  assert cb0 is not None and not cb0.has_attr("checked")
+  # 第二个勾选
+  cb1 = items[1].find("input", {"type": "checkbox"})
+  assert cb1 is not None and cb1.has_attr("checked")
+
+
+def test_post_process_plain_li_untouched() -> None:
+  """普通 list item 不应被改。"""
+  html = "<ul><li>普通项</li><li>另一项</li></ul>"
+  soup = _make_soup(html)
+  ld._post_process_html(soup)
+  items = soup.find_all("li")
+  for li in items:
+    assert li.find("input") is None
+    assert li.get_text() in ("普通项", "另一项")
+
+
+def test_render_final_html_includes_mermaid_script(tmp_path: Path) -> None:
+  """最终 HTML 应含 mermaid.js CDN + 初始化。"""
+  md = tmp_path / "demo.md"
+  md.write_text("# Demo\n\n```mermaid\nflowchart LR\n  X-->Y\n```\n", encoding="utf-8")
+  out = render_final_html(md, title="Demo")
+  html = out.read_text(encoding="utf-8")
+  # mermaid.js CDN
+  assert "cdn.jsdelivr.net/npm/mermaid" in html
+  assert "mermaid.initialize" in html
+  # mermaid 围栏已转 class
+  assert 'class="mermaid"' in html
+  assert "flowchart LR" in html
+
+
+def test_render_final_html_includes_tasklist_checkbox(tmp_path: Path) -> None:
+  """最终 HTML 应含 checkbox(从 GFM tasklist 转换)。"""
+  md = tmp_path / "demo.md"
+  md.write_text(
+    "# Demo\n\n## 任务\n\n- [ ] 未做\n- [x] 已做\n",
+    encoding="utf-8",
+  )
+  out = render_final_html(md, title="Demo")
+  html = out.read_text(encoding="utf-8")
+  # lxml 序列化会把 attribute 重排 + void element 自闭合,不依赖特定顺序
+  assert 'type="checkbox"' in html
+  assert "disabled" in html
+  # 已勾选项应含 checked
+  assert "checked" in html
+  # 原文 "[ ]" / "[x]" 不应残留
+  assert "[ ] 未做" not in html
+  assert "[x] 已做" not in html
+
+
+def test_render_final_html_includes_css_for_mermaid_and_tasklist(
+  tmp_path: Path,
+) -> None:
+  """CSS 应含 pre.mermaid + checkbox 样式。"""
+  md = tmp_path / "demo.md"
+  md.write_text("# X\n", encoding="utf-8")
+  out = render_final_html(md, title="X")
+  html = out.read_text(encoding="utf-8")
+  assert "pre.mermaid" in html
+  assert 'input[type="checkbox"][disabled]' in html

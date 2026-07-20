@@ -34,7 +34,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..config import WorkflowConfig
 
@@ -384,7 +384,25 @@ footer {{
   img {{ max-width: 80%; page-break-inside: avoid; }}
   footer {{ display: none; }}
 }}
+/* v1.0.1:tasklist 不可点击(只读 checkbox)+ mermaid 块留白 */
+input[type="checkbox"][disabled] {{ margin-right: 0.35em; cursor: not-allowed; }}
+pre.mermaid {{ text-align: center; background: #ffffff; }}
+@media (prefers-color-scheme: dark) {{
+  pre.mermaid {{ background: #1a1a1a; }}
+}}
 </style>
+<!-- v1.0.1:GFM ```mermaid 围栏 → 浏览器端渲染 -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  if (typeof mermaid !== "undefined") {{
+    mermaid.initialize({{
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: document.body && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark" : "default"
+    }});
+  }}
+</script>
 </head>
 <body>
 {toc_html}
@@ -468,6 +486,69 @@ def _assign_unique_slugs(
     anchor = slug if n == 0 else f"{slug}-{n}"
     out.append((level, title, slug, anchor))
   return out
+
+
+# ─────────────────────────────────────────────────────────────
+# v1.0.1:后处理 — mermaid 围栏 / GFM tasklist
+# ─────────────────────────────────────────────────────────────
+
+
+_TASKLIST_RE = re.compile(r"^\s*\[([ xX])\]\s*(.*)$", re.DOTALL)
+
+
+def _post_process_html(soup: Any) -> None:
+  """就地修改 soup,处理 markdown → HTML 后的两类残留。
+
+  1. ``mermaid`` 围栏:markdown 库输出 ``<pre><code class="language-mermaid">xxx</code></pre>``,
+     把 ``<code>`` 内容移到 ``<pre>`` 自身 + ``<pre class="mermaid">``,
+     让浏览器端 mermaid.js 自动渲染。
+  2. GFM tasklist:markdown 库默认输出 ``<li>[ ] xxx</li>`` / ``<li>[x] xxx</li>``
+     (有序列表 ``1. [ ] xxx`` 同样落到 ``<li>`` 内),把开头的 ``[ ]`` / ``[x]``
+     替换为 ``<input type="checkbox" disabled>`` (checked 视原状态)。
+  """
+  from bs4 import BeautifulSoup, NavigableString
+
+  # 1. mermaid 围栏
+  for pre in list(soup.find_all("pre")):
+    code = pre.find("code")
+    if code is None:
+      continue
+    classes = code.get("class") or []
+    classes_list = classes.split() if isinstance(classes, str) else list(classes)
+    is_mermaid = any(c in ("mermaid", "language-mermaid") for c in classes_list)
+    if not is_mermaid:
+      continue
+    inner = code.get_text()
+    code.decompose()
+    pre.clear()
+    pre["class"] = "mermaid"
+    pre.append(NavigableString(inner))
+
+  # 2. GFM tasklist checkbox
+  for li in soup.find_all("li"):
+    raw = li.decode_contents()
+    m = _TASKLIST_RE.match(raw)
+    if not m:
+      continue
+    checked = m.group(1).lower() == "x"
+    rest = m.group(2)
+    li.clear()
+    # checkbox 必须作为 tag 插入(NavigableString 会被 escape)
+    checkbox_html = (
+      f'<input type="checkbox" disabled{" checked" if checked else ""}>'
+    )
+    cb_fragment = BeautifulSoup(checkbox_html, "html.parser")
+    cb_tag = cb_fragment.find("input")
+    if cb_tag is not None:
+      li.append(cb_tag.extract())
+    li.append(NavigableString(" "))
+    # rest 可能含 innerHTML(链接等),parse 后逐 child append
+    rest_fragment = BeautifulSoup(rest, "html.parser")
+    for child in list(rest_fragment.contents):
+      if hasattr(child, "name") and child.name is not None:
+        li.append(child.extract())
+      else:
+        li.append(NavigableString(str(child)))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -715,6 +796,9 @@ def _md_body_with_anchors(
     except StopIteration:
       break
     tag["id"] = anchor
+
+  # v1.0.1:后处理 mermaid 围栏 + GFM tasklist checkbox
+  _post_process_html(soup)
 
   return str(soup)
 

@@ -26,9 +26,9 @@ from media_to_doc.state import STAGE_ORDER, State
 # ─────────────────────────────────────────────────────────────
 
 
-def test_version_is_1_0_0() -> None:
-  """首 stable 版本号 = 1.0.0(从安装元数据或 pyproject 同步)。"""
-  assert __version__ == "1.0.0"
+def test_version_is_1_0_1() -> None:
+  """当前版本号 = 1.0.1(W12-C patch,从安装元数据或 pyproject 同步)。"""
+  assert __version__ == "1.0.1"
 
 
 def test_stage_order_has_11_stages() -> None:
@@ -139,7 +139,7 @@ runner = CliRunner()
 
 
 def test_cli_version() -> None:
-  """``mtd version`` 输出当前版本(1.0.0,从安装元数据读)。"""
+  """``mtd version`` 输出当前版本(1.0.1,从安装元数据读)。"""
   result = runner.invoke(cli.app, ["version"])
   assert result.exit_code == 0
   assert __version__ in result.stdout
