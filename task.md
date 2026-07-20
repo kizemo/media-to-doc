@@ -182,7 +182,20 @@
   - [x] pyproject.toml [project.urls] 6 条实 URL + CHANGELOG.md compare links 更新
   - [x] handoff:`handoff-pipeline-w12-github-release-2026-07-20.md`
   - [x] commit:`docs(pipeline): W12-B — GitHub Release v1.0.0 + real project URLs`(待 commit)
-  - [ ] **E. v1.0.1 patch**:修 W11-C §4 标记的 2 个 HTML 渲染降级(mermaid 流程图 / GFM task list)
+  - [x] **E. v1.0.1 patch**:修 W11-C §4 标记的 2 个 HTML 渲染降级(mermaid 流程图 / GFM task list)
+  - [x] `_HTML_TEMPLATE` 加 mermaid@10 CDN + 初始化
+  - [x] `_post_process_html(soup)` BeautifulSoup 后处理:mermaid 围栏 class + tasklist checkbox
+  - [x] CSS:pre.mermaid 留白 + checkbox disabled 样式
+  - [x] 测试 529 → **539 passed** / 0 skipped(+10 用例)
+  - [x] ruff:All checks passed
+  - [x] 真渲染验证(复用 W11-C 107min 视频产物,1 mermaid + 5 checkbox 全正确,无残留)
+  - [x] pyproject.toml version 1.0.0 → 1.0.1
+  - [x] CHANGELOG.md 加 [1.0.1] 节 + compare link
+  - [x] wheel/sdist build OK(124KB + 532KB)
+  - [x] PyPI v1.0.1 上传 OK,JSON API 验证 latest_version=1.0.1
+  - [x] GitHub Release v1.0.1 + 2 assets SHA256 verified
+  - [x] commit:`fix(pipeline): W12-C — v1.0.1 mermaid + GFM tasklist HTML rendering`(`a024045`)
+  - [x] handoff:`handoff-pipeline-w12-c-patch-2026-07-20.md`
 
 ---
 
