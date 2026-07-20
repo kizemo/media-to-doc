@@ -5,8 +5,24 @@
 **Release date**: 2026-07-20
 **Tags**: `v1.0.0`
 **Python**: 3.11 / 3.12 / 3.13 / 3.14
+**PyPI**: https://pypi.org/project/media-to-doc/
 **License**: MIT
 **Status**: 🎉 First stable release
+
+---
+
+## Install
+
+```bash
+# PyPI 装
+uv pip install media_to_doc
+
+# 或装全部功能依赖(~5GB: faster-whisper / scenedetect / rapidocr / diffusers 等)
+uv pip install "media_to_doc[all]"
+
+# 验证
+mtd --version  # media-to-doc 1.0.0
+```
 
 ---
 

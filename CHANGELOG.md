@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 11 阶段流水线全跑通,3 种调用方式(CLI / Python API / MCP server),Loop Engineering 五层闭环端到端接入。
 W10-A 真端到端验证:107 分钟中文培训视频 3 小时 57 分钟跑完,529 测试 0 失败。
+**Published to PyPI**: https://pypi.org/project/media-to-doc/ — `uv pip install media_to_doc`
+W11-C 真分布式文档质量验收:qwen3:14b 净化 107min 视频 4KB → 讲师可分发讲义(9/9 ⭐ 评分)。
 
 ### Added
 

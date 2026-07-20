@@ -318,12 +318,34 @@ print(f"total_runs={runs['total_runs']}, llm_health={runs['llm_health_global']}"
 
 ## 10. 后续规划
 
+> v1.0.0 已 GA 发布到 PyPI(W12-A 完成,2026-07-20)。下表为 v1.0+ 后续工作。
+
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 启动 | 创建项目骨架 + 启动文档 | **当前**(本会话) |
-| L0 - 骨架 | uv 初始化 + pyproject + 目录结构 | 待开始 |
-| L1 - 核心流水线 | 11 阶段最小可跑实现(逐阶段交付) | 待开始 |
-| L1 - 跨项目可调用 | Python API / CLI / MCP server | 待开始 |
-| L1 - 测试 | 每个模块配套 pytest,目标 110+ 用例 | 待开始 |
-| L2 - LE 闭环 | PipelineLogger / Gatekeeper / Post-hook | 待开始 |
-| L3 - 优化 | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
+| ~~启动 / L0-L2 (W0-W11)~~ | 全部 ✅ | 已完成 |
+| **PyPI 上线** | `uv pip install media_to_doc` | ✅ W12-A |
+| **GitHub release 真实发布** | push + `gh release create v1.0.0` | 待用户配 git remote |
+| **v1.0.1 patch** | 修 W11-C §4 标记的 2 个 HTML 渲染降级(mermaid 流程图 / GFM task list) | 待开始 |
+| **v1.1 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 | 待开始(Phase 2) |
+| **v1.2 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始(Phase 3) |
+| **L3 - 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
+| **PyPI 维护** | v1.x 后续 patch / minor release 流程 | 维护期 |
+
+### v1.x 发布流程(已建立)
+
+```bash
+# 1. 修改代码 + bump version in pyproject.toml
+# 2. 测试
+uv run pytest && uv run ruff check
+# 3. build
+uv build
+# 4. publish (keyring 流程,W12-A 已验证)
+export UV_PUBLISH_TOKEN="$(uv run --with keyring python -c \
+    "import keyring; print(keyring.get_password('https://upload.pypi.org/legacy/', '__token__'))")" \
+  && uv publish dist/* \
+  && unset UV_PUBLISH_TOKEN
+# 5. 验证
+uv pip install --upgrade media_to_doc==<NEW_VERSION>
+```
+
+完整历史:看 `task.md` §会话历史 + 各 `handoff-*.md`。

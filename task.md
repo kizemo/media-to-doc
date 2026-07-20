@@ -3,7 +3,7 @@
 > 本文件跟踪 `media-to-doc` 项目从启动到 L2 完整闭环的全部待办。
 > 状态:`[ ]` 未开始 / `[~]` 进行中 / `[x]` 完成 / `[!]` 撞墙待人工
 
-最后更新:2026-07-20(Phase 0 ~ Phase 6 + 7 + 10 + 11 全部完成;**W11-B v1.0.0 GA release 完成**;529 测试 / 0 skip;tag v1.0.0)
+最后更新:2026-07-20(Phase 0 ~ Phase 6 + 7 + 10 + 11 全部完成;**W12-A 上 PyPI 完成**;529 测试 / 0 skip;tag v1.0.0;PyPI URL:https://pypi.org/project/media-to-doc/)
 
 ---
 
@@ -163,6 +163,17 @@
   - [x] verify + gatekeeper 一致 PASS(2 cosmetic warnings:image_refs 无图 + title vs H1 W10-A 既有)
   - [x] `_w11c_run_longdoc.py` 工具脚本可复用(任意 work_dir 真跑 longdoc)
   - [x] commit 见 W11-A `d2b39d3` 之后的 release/v1.0 分支
+- [x] **W12-A 上 PyPI** — **W12-A 完成**
+  - [x] PyPI 项目 `media_to_doc` 公开上线:**https://pypi.org/project/media-to-doc/**
+  - [x] `uv pip install media_to_doc` 干净 venv 验证:lazy import + `__version__=1.0.0` + `mtd --version` 全过
+  - [x] 安全流程:token 进 Windows Credential Locker(keyring)+ `uv run --with keyring python` 拉 token + `uv publish` + unset
+  - [x] 踩坑解决:uv 不读 `.pypirc`(用 keyring)+ uv publish 内嵌 Python 找不到 keyring(用 `uv run --with keyring` 绕路)
+  - [x] CHANGELOG.md 加 PyPI URL + 安装方式
+  - [x] RELEASE_NOTES_v1.0.0.md 加 Install 章节
+  - [x] handoff:`handoff-pipeline-w12-pypi-2026-07-20.md`
+  - [x] commit:`docs(pipeline): W12-A — publish media_to_doc 1.0.0 to PyPI`(待 commit)
+  - [ ] **B. GitHub release 真实发布**:push + `gh release create v1.0.0 --notes-file ...`(待用户配 git remote)
+  - [ ] **E. v1.0.1 patch**:修 W11-C §4 标记的 2 个 HTML 渲染降级(mermaid 流程图 / GFM task list)
 
 ---
 
