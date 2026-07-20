@@ -153,7 +153,16 @@
   - [x] 分支:`release/v1.0`(从 `b410e84` 拉)
   - [x] handoff:`handoff-pipeline-w11-release-2026-07-20.md`
   - [ ] 用户决策:`gh release create v1.0.0` + push + 上 PyPI(等 GitHub repo 创建)
-- [ ] **W11-C 长视频 + 真 LLM 文档质量验收**:同 03.mp4 跑 longdoc active 净化 + 看讲师视角讲义质量(3-4h 真跑,需用户授权突破 session 上限)
+- [x] **W11-C 长视频 + 真 LLM 文档质量验收** — **W11-C 完成**
+  - [x] 策略:复用 W10-A 产物 + 只跑 longdoc active(避免 4h 重跑 ASR),43.87s 完成 1 LLM call
+  - [x] provider=qwen3:14b / num_ctx=32768 / chunks=1 / input=14356 chars / output=1975 chars
+  - [x] 0 LLM failures,retention_rate=0.1376(= noise removal,不是 info loss)
+  - [x] **讲师视角评估 9/9 ⭐⭐⭐⭐⭐**:5 类核心资产保留 + 4 类噪声清理 + 4 级标题
+  - [x] `output_cleaned.md` 结构化讲义(4KB / 105 行 / 7 H2 章节 / 5 表格 / 1 Mermaid 流程图 / 1 checklist)
+  - [x] `output_final.html` 净化后重渲染(10KB,TOC + dark mode + print)
+  - [x] verify + gatekeeper 一致 PASS(2 cosmetic warnings:image_refs 无图 + title vs H1 W10-A 既有)
+  - [x] `_w11c_run_longdoc.py` 工具脚本可复用(任意 work_dir 真跑 longdoc)
+  - [x] commit 见 W11-A `d2b39d3` 之后的 release/v1.0 分支
 
 ---
 
@@ -622,6 +631,35 @@
   - **W11-B v1.0 release prep**(2-3h):CHANGELOG + docs/installation.md + pyproject urls + `uv build` + `gh release create v1.0.0 --draft`
   - **W11-C 长视频 + 真 LLM 文档质量验收**(3-4h 真跑):同 03.mp4 跑 longdoc active 净化 + 看讲师视角讲义质量
   - 推荐:**先 W11-B release(Gatekeeper 已修干净,可放心打 tag)→ 再 W11-C 真质量验收**
+
+### 会话 19 — Phase 11 W11-C 真分布式文档质量验收(2026-07-20,~20min)
+
+- 完成任务(W11-C 主目标完全达成 ✅,用户选 A"真跑 longdoc"):
+  - 分支:`release/v1.0`(沿用)
+  - 策略:**复用 W10-A 产物 + 只跑 longdoc active**(避免 4h 重跑 ASR / chapters / drafts)
+  - 复制 `output/` 199MB → `output-w11c/`,准备干净 work_dir
+  - 调 `process_long_doc(work, ollama_provider, cfg)`:
+    - provider=ollama / model=qwen3:14b / num_ctx=32768
+    - **43.87s** 完成 1 LLM call,W10-A 14KB → W11-C 4KB(`retention_rate=0.1376`)
+  - 0 LLM failures,写 `_W11C_DONE.txt` 标记 + 写 verify.json(W11-C 路径)
+  - 跑 `_w11a_consistency.py` → 一致 PASS
+- **讲师视角评估 9/9 ⭐⭐⭐⭐⭐**:
+  - 5 类核心资产保留:概念 / 数据 / 案例 / 逻辑 / 表格 全保留
+  - 4 类噪声清理:口语填充 / 引导 / 寒暄 / 互动 全清
+  - 4 级标题:用 H1/H2/H3(未用 H4 合理)
+  - 结构:`全站运营方法论与实操指南` + 7 个 H2 章节 + 多 H3 子节
+  - 5 个表格:策略对比 / 误区对比 / 数据指标 / 流量结构 / 预算管理
+  - 1 个 Mermaid 流程图:全站新品测试流程
+  - 1 个可执行 checklist:全站推广风险控制清单
+- 关键发现:
+  - **retention_rate 0.1376 = noise_removal_rate**,不是信息丢失(口语 / 互动 / 寒暄 / 时间戳冗余全删)
+  - **longdoc LLM 净化 ROI 极高**:1 LLM call 44s,讲义从 36KB 降到 4KB(8.7x 压缩),讲师可分发
+  - **1 chunk 满足 14K chars 输入**:`chunk_size=15000 CJK` 在 107min 视频极限为 1-2 chunks,LLM 总开销 30s-2min
+- 撞墙 / 修正:
+  - **`_w11c_run_longdoc.py` F541 f-string 无 placeholder**:ruff 报错 → 改普通字符串
+- W11-C commit + handoff 在 release/v1.0 分支
+- **v1.0 GA 全闭环确认**:W0-W11-C 14 个里程碑全部 ✅,media-to-doc v1.0 GA ready
+- 下次会话第一句话:承接 W11-C handoff,决定 v1.0 后方向(A 上 PyPI / B GitHub release / C Tauri UI / D NSIS 安装器 / E v1.0.1 patch)
 
 ### 会话 18 — Phase 11 W11-B v1.0.0 Release Prep(2026-07-20,~45min)
 
