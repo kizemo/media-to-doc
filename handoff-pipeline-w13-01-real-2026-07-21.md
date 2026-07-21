@@ -142,12 +142,12 @@ git commit -m "feat(pipeline): W13-A — real 01.mp4 end-to-end + LLM fusion val
 
 ---
 
-## 6. 当前进度(check at session exit)
+## 6. 当前进度(check at session exit 15:16 — active session still running)
 
 | Stage | 时间戳 | 段数 / 大小 |
 |---|---|---|
 | audio | 14:01:36-14:01:42 (5.9s) | audio.wav 236MB |
-| asr | 14:01:42+ (running) | 14:08 = 8KB / 82 segs / 302s |
+| asr | 14:01:42+ (running, 75min in) | **15:16 = 115KB / 1249 segs / 2746s / 41.3%** of 6660s<br><br>Rate progression:30min=14% / 35min=31% / 40min=34% / 45min=36% / 50min=39% / 55min=41%<br>avg ~33 s/min audio. python.exe PID 23492 RAM = 3.2GB+ |
 | frames | pending | - |
 | ocr | pending | - |
 | asr_correct | pending | - |
@@ -158,7 +158,80 @@ git commit -m "feat(pipeline): W13-A — real 01.mp4 end-to-end + LLM fusion val
 | longdoc | pending | - |
 | verify | pending | - |
 
+**进度估算**:At 55min mark, 41.3% done. Remaining = 3914s audio.
+At 33 s/min, need ~118 min more = ASR complete ~17:14.
+
+**(90min mark 估算 15:30-15:31)**:Expected progress ~3300s / 6660s = ~50%.
+这"卡 50%+"的 taskkill 阈值附近。**决策:不杀**(rate 稳定,trend 向 100% 完成推进)。
+**下次会话检查点**:如 16:30 ASR 仍 <80% 或卡住 → 决定是否 taskkill 接受 85%。
+
 (状态会随 pipeline 推进更新;详细看 `_w13a_poll.log`)
+
+---
+
+## 7. 续跑策略 — 主 session 退出点 15:50 (16:00 session end)
+
+我已经把 checkpoint commit 落地(`8175db0`)。本会话将在 ~15:50 主动退出。
+
+续跑会话第一句话:
+> 承接 W13-A,见 `handoff-pipeline-w13-01-real-2026-07-21.md`
+> 当前 ASR 41.3% (15:16),Rate 33 s/min,预计 ASR 完成 ~17:14
+
+### 续跑检查序列
+
+```bash
+# 1. 检查 ASR 进度
+cat /tmp/w13a_poll.log | tail -10
+cd "F:/soft/00selfmade/media-to-doc"
+uv run python scripts/_w13a_poll.py 2>&1 | tail -5
+
+# 2. 如果 poll log 已退出(0 = ASR 完成),跳到步骤 4
+# 3. 如果 poll log 还在 asr=running,等下一周期
+tail -3 "C:/Users/Duanyi/AppData/Local/Temp/claude/F--soft-00selfmade-media-to-doc/4d9fb253-c35c-456d-b62f-daed2312e93a/tasks/"*.output 2>/dev/null
+# (或检查 PID 23492 是否还活:tasklist | grep 23492)
+
+# 4. ASR 完成后,frames+ocr 等几个 stage 自动续跑;
+#    poll loop 退出 → 跑 _w13a_run_fusion.py (W12-E fusion 验证)
+
+# 5. 等所有 stage 完成:
+ls "E:/resource/2026-01-27_年度复训/_w13a_inbox/output/pipeline_run.json"
+ls "E:/resource/2026-01-27_年度复训/_w13a_inbox/output/verify/verify.json"
+ls "E:/resource/2026-01-27_年度复训/_w13a_inbox/output_final/"  # 应该看到 01_先精准后放大的打爆策略_cleaned.md
+
+# 6. 跑融合:
+cd "F:/soft/00selfmade/media-to-doc"
+uv run python scripts/_w13a_run_fusion.py
+# 自动 copy 01+03 cleaned.md → _w13a_fusion → mtd merge --fusion ollama
+# 验证 7+ 全局章节 + include 字段分布
+
+# 7. 验收 + 清理 + commit:
+cat "E:/resource/2026-01-27_年度复训/_w13a_inbox/output/chapters/chapters.json" | head -10
+# 期望 video 字段 = "01_先精准后放大的打爆策略"
+
+rm -rf "E:/resource/2026-01-27_年度复训/_w13a_inbox" \
+       "E:/resource/2026-01-27_年度复训/_w13a_fusion"
+
+cd "F:/soft/00selfmade/media-to-doc"
+uv run pytest  # 582 baseline
+uv run ruff check
+
+# 8. commit 全部 W13-A 完成:
+git add -A
+git commit -m "feat(pipeline): W13-A — real 01.mp4 end-to-end + LLM fusion validate"
+```
+
+### 关键路径
+
+| 文件 | 期望值 |
+|---|---|
+| `_w13a_inbox/output/chapters/chapters.json` | `video = "01_先精准后放大的打爆策略"` |
+| `_w13a_inbox/output_final/01_先精准后放大的打爆策略_cleaned.md` | exists (讲师 9/9 ⭐ 净化版) |
+| `_w13a_inbox/output_final/01_先精准后放大的打爆策略_final.html` | exists (TOC + dark mode) |
+| `_w13a_inbox/output/pipeline_run.json` | `llm_health.{chapters,draft,longdoc}_ollama` 真有 calls + failures |
+| `_w13a_inbox/output/verify/verify.json` | `overall_passed = true` |
+| `_w13a_fusion/年度复训综合_cleaned.md` | 7+ H2 章节 + include 字段 2+ 类型 |
+| pytest | 582 passed / 0 skipped |
+| ruff | All checks passed |
 
 ---
 
