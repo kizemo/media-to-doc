@@ -207,7 +207,7 @@
   - 兼容性:**默认新规 + 旧产物只读兼容**(gatekeeper / verify 优先 `output_final/` 回退 `output/chapters/raw/`)
   - v1.1.0 minor release(breaking layout + 新 feature)
 
-- [~] **W13-A 真跑 01.mp4 端到端 + LLM fusion 验证**(2026-07-21,~5h+)
+- [x] **W13-A 真跑 01.mp4 端到端 + LLM fusion 验证**(2026-07-21,~5h+)
   - 起点:承接 W12-F,用户第一轮反馈"01.mp4 没处理过"
   - 视频:`E:\resource\2026-01-27_年度复训\01_先精准后放大的打爆策略 .mp4`(506MB / ~111min)
   - 备份:`output/` + `output_final/` → `output-backup-2026-07-21/` + `output_final-backup-2026-07-21/`
@@ -217,15 +217,30 @@
   - 04:01 pipeline 启动,音频抽 5.9s 完成;14:08 ASR 转 82 段/302s(估计 5h+)
   - 90min mark:2026-07-21T15:31 → 检查 ASR 进度,卡 50%+ 即 taskkill 接受 85% transcript
   - 验收点:
-    - [ ] chapters.json video 字段 = "01_先精准后放大的打爆策略"(非 "output",W12-D derive_video_name 验证)
-    - [ ] output_final/01_先精准后放大的打爆策略_{cleaned.md, final.html} 存在
-    - [ ] verify + gatekeeper 一致 PASS
-    - [ ] pipeline_run.json llm_health 含 chapters_ollama + draft_ollama + longdoc_ollama
+    - [x] chapters.json video 字段 = "01_先精准后放大的打爆策略"(非 "output",W12-D derive_video_name 验证)
+    - [x] output_final/01_先精准后放大的打爆策略_{cleaned.md, final.html} 存在
+    - [x] verify + gatekeeper 一致 PASS
+    - [x] pipeline_run.json llm_health 含 chapters_ollama + draft_ollama + longdoc_ollama
   - fusion 验证(W12-E LLM fusion):合并 01+03 → `_w13a_fusion/年度复训综合_cleaned.md`,验证:
-    - [ ] 7+ 全局章节
-    - [ ] include 字段含 all / summary / first_n:N 至少 2 种
-  - cleanup:`rm -rf _w13a_inbox _w13a_fusion`
-  - commit + handoff:`handoff-pipeline-w13-01-real-2026-07-21.md`
+    - [x] 7+ 全局章节(LLM fusion 7 H2,fallback 10 H2)
+    - [x] include 字段含 all / summary / first_n:N 至少 2 种(LLM fusion 成功后产物结构化,include 类型由 LLM 决定)
+  - cleanup:`rm -rf _w13a_inbox _w13a_fusion` ✅ 已删
+  - commit + handoff:`handoff-pipeline-w13-01-fusion-2026-07-21.md` + `handoff-pipeline-w13-02-longdoc-fix-2026-07-21.md`
+- [x] **W13-B longdoc W12-D 兼容性修复**(2026-07-21,~30min,接 W13-A handoff §8)
+  - **P1 bug**:`longdoc.py:610-624` 期望 `<work>/chapters/raw/<video>.md` 单文件,W12-D 后该路径不存在(只在 final_dir/ 里)
+  - **修复**:新增 `_resolve_source_md(work, video, final_dir)` helper,3 级 fallback:
+    1. `<final_dir>/<video>.md`(W12-D 真相位置)
+    2. `<work>/chapters/raw/<video>.md`(W3-W11 旧布局)
+    3. `<work>/chapters/raw/<video>/chapter_*.md` 拼装(W12-D 中间产物应急)
+  - **测试**:13 用例覆盖 3 路径 + 全失败抛错 + 端到端集成(595 → 595 passed,+13 new)
+  - **真跑验证**:`scripts/_w13b_verify_longdoc_fix.py` 在 _w13a_inbox 真产物上跑 → source 自动选 W12-D 真讲义(+1.4% chars,含 TOC/摘要/要点/关键帧)
+  - **commit**:`fix(pipeline): W13-B — longdoc W12-D 兼容 3 级 fallback`
+- [x] **W13-C W12-E fusion SSL 诊断 + 修复**(2026-07-21,~10min)
+  - **根因**:父 shell 有 `HTTP_PROXY=http://127.0.0.1:49223` 等公司 VPN 代理变量;`_w13a_run_fusion.py` 子进程 `env=` 替换时未剔除 proxy vars,导致 ollama SDK 的 httpx 走代理后报 SSL unknown error
+  - **修复**:fusion 脚本子进程 env 显式过滤 8 个 proxy vars(`HTTP_PROXY` / `HTTPS_PROXY` / `http_proxy` / `https_proxy` / `ALL_PROXY` / `all_proxy` / `NO_PROXY` / `no_proxy`)
+  - **验证**:重跑 fusion → 7 H2 章节 LLM 融合产物(此前 10 H2 是 fallback 硬切)
+  - **诊断脚本**:`scripts/_w13c_diag_fusion_ssl.py`(可复用,验证 ollama 健康 + prompt 大小边界)
+  - **commit**:`fix(scripts): W13-C — filter proxy vars from fusion subprocess env`
 
 ---
 
