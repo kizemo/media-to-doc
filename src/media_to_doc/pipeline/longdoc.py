@@ -552,6 +552,84 @@ def _post_process_html(soup: Any) -> None:
 
 
 # ─────────────────────────────────────────────────────────────
+# 源文件解析(W12-D 兼容)
+# ─────────────────────────────────────────────────────────────
+
+
+def _resolve_source_md(
+  *,
+  work: Path,
+  video: str,
+  final_dir: Path,
+) -> Path:
+  """3 级 fallback 找 ``process_long_doc`` 输入源 markdown。
+
+  W12-D 把 render 阶段最终讲义 ``<video>.md`` 从 ``<work>/chapters/raw/`` 迁到
+  ``<work>.parent / "output_final"``(中间 vs 最终分离)。本函数兼容新旧两种
+  产物布局:
+
+  1. **W12-D 真相位置**:``<final_dir>/<video>.md``(render 已拼装好的讲义,
+     含 TOC + 摘要 + 要点 + 关键帧引用,质量最高)
+  2. **W3-W11 旧布局**:``<work>/chapters/raw/<video>.md``(向后兼容)
+  3. **W12-D 中间产物应急**:``<work>/chapters/raw/<video>/chapter_*.md``
+     拼装成单文件 → 写到第 2 项路径,作为 longdoc 输入
+
+  Parameters
+  ----------
+  work : Path
+    中间产物根目录(含 ``chapters/`` 子目录)
+  video : str
+    真视频名(从 ``chapters.json.video`` 派生)
+  final_dir : Path
+    最终产物目录(默认 ``<work>.parent / "output_final"``)— 用于第 1 级查找
+
+  Returns
+  -------
+  Path
+    实际存在的 markdown 路径(第 3 级 fallback 会顺带写一个新文件)
+
+  Raises
+  ------
+  FileNotFoundError
+    三层都找不到时,错误信息列出全部尝试路径便于排查
+  """
+  chapters_raw_dir = work / "chapters" / "raw"
+
+  # 1. W12-D 真相位置:final_dir/<video>.md
+  candidate = final_dir / f"{video}.md"
+  if candidate.is_file():
+    return candidate
+
+  # 2. W3-W11 旧布局:chapters/raw/<video>.md
+  candidate = chapters_raw_dir / f"{video}.md"
+  if candidate.is_file():
+    return candidate
+
+  # 3. W12-D 中间产物应急:chapters/raw/<video>/chapter_*.md 拼装
+  video_dir = chapters_raw_dir / video
+  if video_dir.is_dir():
+    chapter_files = sorted(video_dir.glob("chapter_*.md"))
+    if chapter_files:
+      assembled = chapters_raw_dir / f"{video}.md"
+      assembled.write_text(
+        "\n\n---\n\n".join(
+          c.read_text(encoding="utf-8") for c in chapter_files
+        ),
+        encoding="utf-8",
+      )
+      return assembled
+
+  # 全部失败,提示所有尝试路径
+  raise FileNotFoundError(
+    f"找不到源 markdown (W12-D 兼容 3 级 fallback 全失败);\n"
+    f"  1. final_dir: {final_dir / f'{video}.md'}\n"
+    f"  2. legacy:    {chapters_raw_dir / f'{video}.md'}\n"
+    f"  3. dir-glob:  {chapters_raw_dir / video}/chapter_*.md\n"
+    f"请先跑 render stage"
+  )
+
+
+# ─────────────────────────────────────────────────────────────
 # 公开 API
 # ─────────────────────────────────────────────────────────────
 
@@ -606,35 +684,8 @@ def process_long_doc(
     源 markdown 不存在
   """
   _ = config
-  # 1. 定位源文件
-  if source_md is None:
-    # 默认: ``<work>/chapters/raw/<video_stem>.md``(与 render 一致)
-    chapters_dir = work / "chapters"
-    if (chapters_dir / "chapters.json").exists():
-      chapters_json = json.loads(
-        (chapters_dir / "chapters.json").read_text(encoding="utf-8")
-      )
-      video = (chapters_json.get("video") or "").strip() or "output"
-    else:
-      video = "output"
-    source_md = chapters_dir / "raw" / f"{video}.md"
-  if not source_md.exists():
-    raise FileNotFoundError(
-      f"找不到源 markdown {source_md};请先跑 render stage"
-    )
-
   # W12-D:输出目录优先级 = final_dir > output_dir > <work>.parent / "output_final"
-  if output_stem is None:
-    # 优先用 chapters.json video 字段(真视频名),fallback 到 source_md.stem
-    chapters_dir = work / "chapters"
-    if (chapters_dir / "chapters.json").exists():
-      chapters_json = json.loads(
-        (chapters_dir / "chapters.json").read_text(encoding="utf-8")
-      )
-      output_stem = (chapters_json.get("video") or "").strip() or source_md.stem
-    else:
-      output_stem = source_md.stem
-
+  # 先算 target_dir,因为 _resolve_source_md 需要它作为 W12-D 真相查找位置
   target_dir: Path
   if final_dir is not None:
     target_dir = final_dir
@@ -644,15 +695,46 @@ def process_long_doc(
     target_dir = work.parent / "output_final"
   target_dir.mkdir(parents=True, exist_ok=True)
 
+  # 1. 定位源文件(W12-D 兼容 3 级 fallback)
+  if source_md is None:
+    chapters_dir = work / "chapters"
+    if (chapters_dir / "chapters.json").exists():
+      chapters_json = json.loads(
+        (chapters_dir / "chapters.json").read_text(encoding="utf-8")
+      )
+      video = (chapters_json.get("video") or "").strip() or "output"
+    else:
+      video = "output"
+    source_md = _resolve_source_md(
+      work=work,
+      video=video,
+      final_dir=target_dir,
+    )
+  if not source_md.exists():
+    raise FileNotFoundError(
+      f"找不到源 markdown {source_md};请先跑 render stage"
+    )
+
+  # 2. output_stem 派生(优先 chapters.json video,fallback source_md.stem)
+  if output_stem is None:
+    chapters_dir = work / "chapters"
+    if (chapters_dir / "chapters.json").exists():
+      chapters_json = json.loads(
+        (chapters_dir / "chapters.json").read_text(encoding="utf-8")
+      )
+      output_stem = (chapters_json.get("video") or "").strip() or source_md.stem
+    else:
+      output_stem = source_md.stem
+
   text = source_md.read_text(encoding="utf-8")
   if not text.strip():
     raise ValueError(f"源 markdown {source_md} 为空")
 
-  # 2. 决定净化模式
+  # 3. 决定净化模式
   provider_name = getattr(provider, "name", "skip") or "skip"
   use_llm = provider is not None and provider_name != "skip"
 
-  # 3. 分块 + 净化
+  # 4. 分块 + 净化
   chunks = _split_into_chunks(text, chunk_size=chunk_size)
   cleaned_chunks: list[str] = []
   total_rules: list[str] = []
