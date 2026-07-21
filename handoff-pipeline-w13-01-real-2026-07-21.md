@@ -142,12 +142,12 @@ git commit -m "feat(pipeline): W13-A — real 01.mp4 end-to-end + LLM fusion val
 
 ---
 
-## 6. 当前进度(check at session exit 15:16 — active session still running)
+## 6. 当前进度(check at session exit 15:47 — session end 16:00)
 
 | Stage | 时间戳 | 段数 / 大小 |
 |---|---|---|
 | audio | 14:01:36-14:01:42 (5.9s) | audio.wav 236MB |
-| asr | 14:01:42+ (running, 75min in) | **15:16 = 115KB / 1249 segs / 2746s / 41.3%** of 6660s<br><br>Rate progression:30min=14% / 35min=31% / 40min=34% / 45min=36% / 50min=39% / 55min=41%<br>avg ~33 s/min audio. python.exe PID 23492 RAM = 3.2GB+ |
+| asr | 14:01:42+ (running, 1h45m in @ 15:47) | **15:46 = 173KB / 1889 segs / 4071.4s / 61.1%** of 6660s<br><br>Rate progression:<br>30min=14% / 35min=31% / 40min=34% / 45min=36% / 50min=39% / 55min=41%<br>1h10m=49.6% / 1h15m=55.5% / 1h45m=61.1%<br>last 30min avg = (4071-2746)/30 = 44.2 s/min audio |
 | frames | pending | - |
 | ocr | pending | - |
 | asr_correct | pending | - |
@@ -158,12 +158,11 @@ git commit -m "feat(pipeline): W13-A — real 01.mp4 end-to-end + LLM fusion val
 | longdoc | pending | - |
 | verify | pending | - |
 
-**进度估算**:At 55min mark, 41.3% done. Remaining = 3914s audio.
-At 33 s/min, need ~118 min more = ASR complete ~17:14.
+**进度估算**:At 1h45m mark (15:47), 61.1% done. Remaining = 2589s audio.
+At 44.2 s/min, need ~58 min more = ASR complete ~16:54。
 
-**(90min mark 估算 15:30-15:31)**:Expected progress ~3300s / 6660s = ~50%.
-这"卡 50%+"的 taskkill 阈值附近。**决策:不杀**(rate 稳定,trend 向 100% 完成推进)。
-**下次会话检查点**:如 16:30 ASR 仍 <80% 或卡住 → 决定是否 taskkill 接受 85%。
+**(90min mark 实际 15:31-15:32)**:实际数据 49.6% @ 1h10m → 55.5% @ 1h15m → 61.1% @ 1h45m。
+Rate 在 ~44 s/min 健康上扬。**决策:不杀**(已过半且 rate 健康上扬)。
 
 (状态会随 pipeline 推进更新;详细看 `_w13a_poll.log`)
 
