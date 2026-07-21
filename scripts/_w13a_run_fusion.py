@@ -10,7 +10,7 @@ Steps:
   3. uv run mtd merge _w13a_fusion/ --fusion ollama --name "年度复训综合"
   4. verify fusion plan output (7+ chapters, varied include values)
 """
-import json
+import os
 import shutil
 import subprocess
 import sys
@@ -53,6 +53,19 @@ def main() -> int:
 
     # 3) Run mtd merge
     print("\n>> uv run mtd merge _w13a_fusion --fusion ollama --name '年度复训综合'")
+    # W13-C 修复:公司 VPN HTTP_PROXY/HTTPS_PROXY 会污染 ollama SDK 的 httpx
+    # client(走代理后 ollama SDK 报 SSL: unknown error),必须显式 unset。
+    proxy_vars = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+                  "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy")
+    clean_env = {
+      "PATH": "/c/Windows/System32:/usr/bin:/bin",
+      "HOME": str(Path.home()),
+      "USERPROFILE": str(Path.home()),
+      "OLLAMA_HOST": "http://localhost:11434",
+    }
+    for k, v in os.environ.items():
+      if k not in proxy_vars:
+        clean_env[k] = v
     proc = subprocess.run(
         [
             "uv", "run", "--project", str(PROJECT_ROOT),
@@ -61,12 +74,7 @@ def main() -> int:
             "--name", "年度复训综合",
         ],
         cwd=str(ROOT),
-        env={
-            "PATH": "/c/Windows/System32:/usr/bin:/bin",
-            "HOME": str(Path.home()),
-            "USERPROFILE": str(Path.home()),
-            "OLLAMA_HOST": "http://localhost:11434",
-        },
+        env=clean_env,
         capture_output=False,
     )
     if proc.returncode != 0:
