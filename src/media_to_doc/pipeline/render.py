@@ -237,6 +237,53 @@ def _render_markdown_to_html(md_text: str) -> str:
   return md.convert(md_text)
 
 
+_FIRST_H1_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.DOTALL | re.IGNORECASE)
+_TAG_STRIP_RE = re.compile(r"<[^>]+>")
+
+
+def _extract_first_h1_text(body_html: str) -> str:
+  """从渲染后的 body_html 提取首个 ``<h1>`` 标签的纯文本(去除内嵌标签)。
+
+  用纯 stdlib regex,避免给 render stage 增加 BeautifulSoup 依赖(那是
+  longdoc extras)。
+
+  用于 v1.2.0+ 解决 ``<title>`` 与首个 H1 不一致的 verify warning:
+  当 chapters.video 不可用 / 退化 "output" 时,fallback 到首个 H1 真实文本。
+  """
+  m = _FIRST_H1_RE.search(body_html)
+  if not m:
+    return ""
+  text = _TAG_STRIP_RE.sub("", m.group(1))
+  return text.strip()
+
+
+def _resolve_title(
+  report_video: str,
+  body_html: str,
+  fallback_stem: str,
+) -> str:
+  """resolve HTML ``<title>`` 的最终值。
+
+  优先级(W12-F):
+  1. ``report_video``(真视频名,chapters.video)— 优先,避免依赖后续 markdown
+  2. body_html 首个 H1 文本(`_extract_first_h1_text`)— fallback,确保
+     ``<title>`` 与首个 H1 一致(消除 verify warning)
+  3. ``fallback_stem``(通常 = output_stem)— 兜底
+
+  Returns
+  -------
+  str
+    非空 title(至少 = fallback_stem)
+  """
+  v = (report_video or "").strip()
+  if v:
+    return v
+  h1 = _extract_first_h1_text(body_html)
+  if h1:
+    return h1
+  return (fallback_stem or "").strip() or "output"
+
+
 def _wrap_html_body(body_html: str, title: str) -> str:
   """用 jinja2 模板把 body 包成完整 HTML。"""
   import datetime as _dt
@@ -439,7 +486,10 @@ def render_outputs(
   html_path: Path | None = None
   if write_html:
     body_html = _render_markdown_to_html(md_text)
-    full_html = _wrap_html_body(body_html, report.video or output_stem)
+    full_html = _wrap_html_body(
+      body_html,
+      _resolve_title(report.video, body_html, output_stem),
+    )
     html_path = target_dir / f"{output_stem}.html"
     html_path.write_text(full_html, encoding="utf-8")
 
@@ -473,7 +523,7 @@ def render_html(md_path: Path, *, html_path: Path | None = None) -> Path:
     raise FileNotFoundError(f"找不到 {md_path}")
   md_text = md_path.read_text(encoding="utf-8")
   body_html = _render_markdown_to_html(md_text)
-  title = md_path.stem
+  title = _resolve_title("", body_html, md_path.stem)
   full_html = _wrap_html_body(body_html, title)
   target = html_path or md_path.with_suffix(".html")
   target.write_text(full_html, encoding="utf-8")

@@ -323,6 +323,101 @@ def test_render_outputs_html_only_via_write_html_false(tmp_path: Path) -> None:
   assert not html_p.exists()
 
 
+# ─────────────────────────────────────────────────────────────
+# HTML <title> 解析(W12-F:解决 <title> vs 首个 H1 不一致)
+# ─────────────────────────────────────────────────────────────
+
+
+def test_extract_first_h1_text_returns_first_h1_inner_text() -> None:
+  from media_to_doc.pipeline.render import _extract_first_h1_text
+
+  html = "<html><body><h1>主标题</h1><p>...</p><h2>章节</h2></body></html>"
+  assert _extract_first_h1_text(html) == "主标题"
+
+
+def test_extract_first_h1_text_strips_inner_tags() -> None:
+  """H1 内部含内嵌标签(如链接 / 强调)时,只取纯文本。"""
+  from media_to_doc.pipeline.render import _extract_first_h1_text
+
+  html = "<h1><strong>核心</strong>讲义<a href='#foo'>标题</a></h1>"
+  assert _extract_first_h1_text(html) == "核心讲义标题"
+
+
+def test_extract_first_h1_text_returns_empty_when_no_h1() -> None:
+  from media_to_doc.pipeline.render import _extract_first_h1_text
+
+  html = "<html><body><h2>章节</h2><h3>子章节</h3></body></html>"
+  assert _extract_first_h1_text(html) == ""
+
+
+def test_resolve_title_prefers_report_video() -> None:
+  """``report.video`` 非空时优先(W12-D 派生真视频名)。"""
+  from media_to_doc.pipeline.render import _resolve_title
+
+  assert _resolve_title(
+    report_video="01_先精准后放大",
+    body_html="<h1>旧 fallback</h1>",
+    fallback_stem="output",
+  ) == "01_先精准后放大"
+
+
+def test_resolve_title_falls_back_to_first_h1() -> None:
+  """``report.video`` 为空时,fallback 首个 H1(消除 W11-C §4 warning)。"""
+  from media_to_doc.pipeline.render import _resolve_title
+
+  assert _resolve_title(
+    report_video="",
+    body_html="<h1>全站运营方法论</h1><p>...</p>",
+    fallback_stem="output",  # W3 render 旧 behavior(产生 warning 的根因)
+  ) == "全站运营方法论"
+
+
+def test_resolve_title_falls_back_to_stem_when_no_h1() -> None:
+  """首个 H1 也缺失时,兜底 fallback_stem。"""
+  from media_to_doc.pipeline.render import _resolve_title
+
+  assert _resolve_title(
+    report_video="",
+    body_html="<h2>没有 H1</h2>",
+    fallback_stem="course-x",
+  ) == "course-x"
+
+
+def test_render_outputs_html_title_matches_first_h1(tmp_path: Path) -> None:
+  """render 端到端:HTML ``<title>`` 应等于首个 H1(消除 W11-C §4 warning)。"""
+  work = tmp_path
+  cdir = work / "chapters"
+  # 用 chapters.video 为空的 seed(模拟旧 W3 跑:video 字段 fallback "output")
+  _seed_chapters_json(
+    cdir, [_make_chapter(1, "章节")], video="",  # 模拟 chaps.video 缺失
+  )
+  drafts_dir = cdir / "raw" / "course-x"
+  _seed_chapter_md(drafts_dir, 1, "实际讲义标题\n\n正文")
+
+  # _assemble_markdown 第一个 H1 是 `# course-x`(自带 stem),要测的是真实 H1 匹配
+  # 这里直接验证 _resolve_title 的端到端行为:render 后 HTML <title> 与首个 H1 一致
+  out = render_outputs(
+    work,
+    chapters_dir=cdir,
+    drafts_dir=drafts_dir,
+    final_dir=tmp_path / "output_final",
+  )
+  html = out.html_path.read_text(encoding="utf-8")
+
+  # 提取 HTML 中的 <title>...</title>
+  import re
+
+  title_m = re.search(r"<title>(.*?)</title>", html)
+  h1_m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.DOTALL)
+  assert title_m is not None and h1_m is not None
+  title_text = title_m.group(1).strip()
+  h1_text = re.sub(r"<[^>]+>", "", h1_m.group(1)).strip()
+  # verify 行为:<title> 与首个 H1 应该匹配(包含或相等)
+  assert title_text in h1_text or h1_text in title_text, (
+    f"<title>={title_text!r} 与首个 H1={h1_text!r} 不一致"
+  )
+
+
 def test_render_outputs_raises_when_no_chapters_json(tmp_path: Path) -> None:
   with pytest.raises(FileNotFoundError, match="chapters.json"):
     render_outputs(tmp_path, chapters_dir=tmp_path / "chapters")
