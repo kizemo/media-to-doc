@@ -197,7 +197,7 @@
   - [x] commit:`fix(pipeline): W12-C — v1.0.1 mermaid + GFM tasklist HTML rendering`(`a024045`)
   - [x] handoff:`handoff-pipeline-w12-c-patch-2026-07-20.md`
 
-- [~] **F. v1.1.0 multi-video layout + merge**(W12-D,2026-07-21,~1.5-2h 进行中)
+- [x] **F. v1.1.0 multi-video layout + merge**(W12-D,2026-07-21,~2h 完成)
   - 新规(用户 2026-07-21 拍板):
     1. **中间 vs 最终分离**:中间产物(ASR/frames/OCR/chapters/drafts/state) → `<video>.parent / output/`;
        最终 md/html → `<video>.parent / output_final/`
