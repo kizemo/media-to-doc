@@ -661,6 +661,17 @@ def merge(
     "--no-html",
     help="跳过 HTML 渲染(只生成 md)",
   ),
+  fusion: str | None = typer.Option(
+    None,
+    "--fusion",
+    help="W12-D 扩展:启用 LLM 章节融合(传入 provider 名,如 ollama/anthropic)。"
+    " 默认 None = 硬切模式",
+  ),
+  fusion_model: str = typer.Option(
+    "",
+    "--fusion-model",
+    help="fusion 模式下的 LLM 模型名(空时用 provider 默认)",
+  ),
   json_output: bool = typer.Option(
     False,
     "--json",
@@ -669,13 +680,38 @@ def merge(
 ) -> None:
   """合并多视频讲义(按用户新规第 3 条)。
 
-  扫描 ``<output_final_dir>/<video>*.md``,合并为一份总讲义,文件名用第一个视频名
-  (去除序号),章节序号全局重排,图片路径重写到 ``<merged>/images/<video>_<file>``。
+  扫描 ``<output_final_dir>/<video>*.md``,合并为一份总讲义。
+  默认硬切模式(每个视频作为独立 part);--fusion <provider> 启用 LLM 融合
+  (为每个视频建立章节+摘要简化版,让 LLM 决定全局融合章节结构,内容驱动而非
+  视频驱动)。
   """
   from .pipeline.merge_lectures import merge_lectures
 
+  # 解析 fusion provider
+  fusion_provider = None
+  if fusion is not None:
+    from .config import WorkflowConfig
+    from .llm import get_provider
+
+    cfg = WorkflowConfig()
+    fusion_provider = get_provider(
+      fusion,
+      model=fusion_model or cfg.llm.model,
+      api_key=cfg.llm.api_key_ref,
+      base_url=cfg.llm.base_url,
+      temperature=cfg.llm.temperature,
+      max_tokens=cfg.llm.max_tokens,
+      timeout_seconds=cfg.llm.timeout_seconds,
+      num_ctx=cfg.llm.num_ctx,
+    )
+
   try:
-    result = merge_lectures(output_final_dir, merged_name=name, no_html=no_html)
+    result = merge_lectures(
+      output_final_dir,
+      merged_name=name,
+      no_html=no_html,
+      fusion_provider=fusion_provider,
+    )
   except (FileNotFoundError, ValueError) as exc:
     if json_output:
       console.print_json(data={"error": f"{type(exc).__name__}: {exc}"})

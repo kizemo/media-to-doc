@@ -559,6 +559,8 @@ def tool_merge_lectures(
   output_final_dir: str,
   merged_name: str | None = None,
   no_html: bool = False,
+  fusion: str | None = None,
+  fusion_model: str = "",
 ) -> dict[str, Any]:
   """W12-D 新增:合并多视频讲义(按用户新规第 3 条)。
 
@@ -570,6 +572,10 @@ def tool_merge_lectures(
     合并产物名(去 .md 后缀)。默认 = 第一个视频 stem 去除序号
   no_html : bool
     跳过 HTML 渲染
+  fusion : str | None
+    W12-D 扩展:启用 LLM 章节融合的 provider 名(如 ollama / anthropic)
+  fusion_model : str
+    fusion 模式下的 LLM 模型名(空时用 provider 默认)
 
   Returns
   -------
@@ -578,8 +584,28 @@ def tool_merge_lectures(
   """
   from .pipeline.merge_lectures import merge_lectures
 
+  fusion_provider = None
+  if fusion is not None:
+    from .config import WorkflowConfig
+    from .llm import get_provider
+
+    cfg = WorkflowConfig()
+    fusion_provider = get_provider(
+      fusion,
+      model=fusion_model or cfg.llm.model,
+      api_key=cfg.llm.api_key_ref,
+      base_url=cfg.llm.base_url,
+      temperature=cfg.llm.temperature,
+      max_tokens=cfg.llm.max_tokens,
+      timeout_seconds=cfg.llm.timeout_seconds,
+      num_ctx=cfg.llm.num_ctx,
+    )
+
   result = merge_lectures(
-    Path(output_final_dir), merged_name=merged_name, no_html=no_html,
+    Path(output_final_dir),
+    merged_name=merged_name,
+    no_html=no_html,
+    fusion_provider=fusion_provider,
   )
   return result.to_dict()
 
@@ -875,8 +901,9 @@ async def handle_list_tools() -> list[types.Tool]:
       name="merge_lectures",
       description=(
         "W12-D 新增:合并多视频讲义为一份总讲义。"
-        "扫描 output_final_dir 下的 _cleaned.md,合并,文件名用第一个视频名(去序号),"
-        "章节全局重排,图片路径重写到 <merged>/images/<video>_<file>。"
+        "扫描 output_final_dir 下的 _cleaned.md,合并,文件名用第一个视频名(去序号)。"
+        "默认硬切模式(每个视频作为独立 part);fusion=ollama/anthropic 启用"
+        " LLM 章节融合(为每个视频建立简化版,LLM 决定全局融合章节结构)。"
         "至少需要 2 个视频讲义。"
       ),
       inputSchema={
@@ -894,6 +921,15 @@ async def handle_list_tools() -> list[types.Tool]:
             "type": "boolean",
             "default": False,
             "description": "跳过 HTML 渲染(只生成 md)",
+          },
+          "fusion": {
+            "type": "string",
+            "enum": ["ollama", "anthropic", "openai_compatible"],
+            "description": "W12-D 扩展:启用 LLM 章节融合(传 provider 名);省略时硬切",
+          },
+          "fusion_model": {
+            "type": "string",
+            "description": "fusion 模式下的 LLM 模型名(空时用 provider 默认)",
           },
         },
         "required": ["output_final_dir"],
