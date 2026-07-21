@@ -179,38 +179,53 @@ def _resolve_drafts_dir(work: Path) -> Path | None:
 def _check_outputs_exist(
   drafts_dir: Path | None,
   stem: str,
+  final_dir: Path | None = None,
 ) -> CheckResult:
   """校验 ``<stem>.md`` / ``<stem>_cleaned.md`` / ``<stem>_final.html`` 都存在。
 
-  兼容新旧两种布局:
-  - 新(默认,render W3):``<drafts_dir>/../<stem>.md``
+  兼容 W12-D final_dir + 新旧三种布局:
+  - **W12-D final_dir**(默认,若提供):``<final_dir>/<stem>.md`` + ``_cleaned.md`` + ``_final.html``
+  - 新(W3+):``<drafts_dir>/../<stem>.md``
   - 旧(W4 长文档遗留):``<drafts_dir>/<stem>.md``
   """
   result = CheckResult(
     name="outputs_exist",
     passed=True,
-    detail=f"drafts_dir={drafts_dir}, stem={stem}",
+    detail=f"drafts_dir={drafts_dir}, stem={stem}, final_dir={final_dir}",
   )
   if drafts_dir is None:
     result.passed = False
     result.failures.append("drafts_dir 不存在(无法定位 render / longdoc 产物)")
     return result
 
-  # 新布局优先(drafts_dir 是 raw/<stem>,rendered md 在 raw/<stem>.md)
-  new_layout = drafts_dir.parent / f"{stem}.md"
-  candidates: list[tuple[Path, str]] = []
-  if new_layout.exists():
-    candidates.extend([
-      (drafts_dir.parent / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),
-      (drafts_dir.parent / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),
-      (drafts_dir.parent / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),
-    ])
+  # W12-D final_dir 布局优先(若提供且文件存在)
+  use_final = final_dir is not None and (
+    (final_dir / f"{stem}{_RENDERED_MD_SUFFIX}").exists()
+    or (final_dir / f"{stem}{_CLEANED_MD_SUFFIX}").exists()
+    or (final_dir / f"{stem}{_FINAL_HTML_SUFFIX}").exists()
+  )
+  if use_final:
+    candidates = [
+      (final_dir / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),  # type: ignore[operator]
+      (final_dir / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),  # type: ignore[operator]
+      (final_dir / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),  # type: ignore[operator]
+    ]
   else:
-    candidates.extend([
-      (drafts_dir / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),
-      (drafts_dir / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),
-      (drafts_dir / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),
-    ])
+    # 新布局(drafts_dir 是 raw/<stem>,rendered md 在 raw/<stem>.md)
+    new_layout = drafts_dir.parent / f"{stem}.md"
+    candidates = []
+    if new_layout.exists():
+      candidates.extend([
+        (drafts_dir.parent / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),
+        (drafts_dir.parent / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),
+        (drafts_dir.parent / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),
+      ])
+    else:
+      candidates.extend([
+        (drafts_dir / f"{stem}{_RENDERED_MD_SUFFIX}", "rendered .md"),
+        (drafts_dir / f"{stem}{_CLEANED_MD_SUFFIX}", "cleaned .md"),
+        (drafts_dir / f"{stem}{_FINAL_HTML_SUFFIX}", "final .html"),
+      ])
   for path, label in candidates:
     if not path.exists():
       result.passed = False
@@ -280,12 +295,17 @@ def _check_image_refs(
   drafts_dir: Path | None,
   rendered_md: Path | None,
   cleaned_md: Path | None,
+  final_dir: Path | None = None,
+  stem: str | None = None,
 ) -> CheckResult:
   """校验所有图像引用的实际文件都存在。
 
+  W12-D 优先查 ``<final_dir>/<stem>/images/``(render 复制过来的),
+  回退到 ``<drafts_dir>/images/``(中间产物布局)。
+
   拼装后的 md 引用形如 ``<stem>/images/gen_xxx.png`` → 在
-  ``<drafts_dir>/images/gen_xxx.png`` 找。
-  草稿 wiki-link 引用形如 ``gen_xxx.png`` → 在 ``<drafts_dir>/images/gen_xxx.png`` 找。
+  ``<final_dir>/<stem>/images/gen_xxx.png``(W12-D)或
+  ``<drafts_dir>/images/gen_xxx.png``(旧布局)找。
   """
   result = CheckResult(
     name="image_refs",
@@ -297,7 +317,6 @@ def _check_image_refs(
     result.failures.append("drafts_dir 不存在,无法校验图像引用")
     return result
 
-  images_dir = drafts_dir / "images"
   sources_checked: list[Path] = []
   if rendered_md and rendered_md.exists():
     sources_checked.append(rendered_md)
@@ -313,13 +332,15 @@ def _check_image_refs(
     text = src.read_text(encoding="utf-8")
     for _alt, ref in _collect_image_refs(text):
       total_refs += 1
-      # ref 可能是 ``<stem>/images/gen_xxx.png`` 或 ``images/gen_xxx.png`` 或
-      # ``gen_xxx.png``(草稿 wiki-link)
       filename = ref.rsplit("/", 1)[-1]
       if not filename.endswith(".png"):
         continue
-      target = images_dir / filename
-      if not target.exists():
+      # W12-D:候选路径(final_dir 优先 → drafts_dir 回退)
+      candidates: list[Path] = []
+      if final_dir is not None and stem:
+        candidates.append(final_dir / stem / "images" / filename)
+      candidates.append(drafts_dir / "images" / filename)
+      if not any(c.exists() for c in candidates):
         missing.append(f"{src.name} → {ref}")
 
   if missing:
@@ -329,7 +350,9 @@ def _check_image_refs(
       result.failures.append(f"... 还有 {len(missing) - 50} 个缺失图像(已截断)")
 
   result.detail = (
-    f"total_refs={total_refs}, images_dir={images_dir}, missing={len(missing)}"
+    f"total_refs={total_refs}, drafts_images={drafts_dir / 'images'}, "
+    f"final_images={(final_dir / stem / 'images') if final_dir and stem else None}, "
+    f"missing={len(missing)}"
   )
   return result
 
@@ -410,16 +433,33 @@ def _check_html_structure(
 # ─────────────────────────────────────────────────────────────
 
 
+def _load_final_dir_from_state(work: Path) -> Path | None:
+  """W12-D:从 ``state.json`` 读取 ``final_dir`` 字段(供 verify 路径解析)。"""
+  state_path = work / "state.json"
+  if not state_path.exists():
+    return None
+  try:
+    data = json.loads(state_path.read_text(encoding="utf-8"))
+    fd = data.get("final_dir")
+    return Path(fd) if fd else None
+  except (json.JSONDecodeError, OSError):
+    return None
+
+
 def verify_pipeline(
   work: Path,
   *,
   chapters_dir: Path | None = None,
   drafts_dir: Path | None = None,
   output_stem: str | None = None,
+  final_dir: Path | None = None,
   write_report: bool = True,
 ) -> VerifyReport:
   """Stage 11:跑 4 项机器可验证检查,输出 :class:`VerifyReport` + 可选写
   ``<work>/verify/verify.json``。
+
+  W12-D 新增 ``final_dir`` 参数:从 ``state.json`` 自动读取最终产物目录,
+  优先查 final_dir 下的产物。
 
   Parameters
   ----------
@@ -430,7 +470,9 @@ def verify_pipeline(
   drafts_dir : Path | None
     草稿/产物目录(默认从 chapters.json 派生)
   output_stem : str | None
-    产物文件 stem(默认 ``drafts_dir.name``)
+    产物文件 stem(默认 ``drafts_dir.name``,W12-D 起 = chapters.json video)
+  final_dir : Path | None
+    W12-D 新增:最终产物目录。默认从 ``<work>/state.json`` 读。
   write_report : bool
     是否写 ``<work>/verify/verify.json``(默认 True)
 
@@ -439,6 +481,9 @@ def verify_pipeline(
   VerifyReport
     整体校验结果(已落盘:verify.json)
   """
+  if final_dir is None:
+    final_dir = _load_final_dir_from_state(work)
+
   c_dir = chapters_dir or (work / "chapters")
   chapters_json = c_dir / "chapters.json"
   if drafts_dir is None and chapters_json.exists():
@@ -448,15 +493,22 @@ def verify_pipeline(
   if output_stem is None:
     output_stem = "output"
 
-  rendered_md = (
-    drafts_dir / f"{output_stem}{_RENDERED_MD_SUFFIX}" if drafts_dir else None
-  )
-  cleaned_md = (
-    drafts_dir / f"{output_stem}{_CLEANED_MD_SUFFIX}" if drafts_dir else None
-  )
-  # HTML 兼容新旧布局(新:layout 是 raw/<stem>,最终 HTML 在 raw/<stem>_final.html)
+  # W12-D:最终产物路径解析(final_dir 优先 → drafts_dir 回退)
+  rendered_md: Path | None = None
+  cleaned_md: Path | None = None
   final_html: Path | None = None
-  if drafts_dir is not None:
+
+  if final_dir is not None:
+    rendered_md = final_dir / f"{output_stem}{_RENDERED_MD_SUFFIX}"
+    cleaned_md = final_dir / f"{output_stem}{_CLEANED_MD_SUFFIX}"
+    final_html = final_dir / f"{output_stem}{_FINAL_HTML_SUFFIX}"
+
+  # fallback:drafts_dir 下查(向后兼容旧布局)
+  if (rendered_md is None or not rendered_md.exists()) and drafts_dir is not None:
+    rendered_md = drafts_dir / f"{output_stem}{_RENDERED_MD_SUFFIX}"
+  if (cleaned_md is None or not cleaned_md.exists()) and drafts_dir is not None:
+    cleaned_md = drafts_dir / f"{output_stem}{_CLEANED_MD_SUFFIX}"
+  if (final_html is None or not final_html.exists()) and drafts_dir is not None:
     candidate_new = drafts_dir.parent / f"{output_stem}{_FINAL_HTML_SUFFIX}"
     candidate_old = drafts_dir / f"{output_stem}{_FINAL_HTML_SUFFIX}"
     if candidate_new.exists():
@@ -473,9 +525,12 @@ def verify_pipeline(
     video = (data.get("video") or "").strip()
 
   checks: list[CheckResult] = [
-    _check_outputs_exist(drafts_dir, output_stem),
+    _check_outputs_exist(drafts_dir, output_stem, final_dir=final_dir),
     _check_chapters_complete(work, drafts_dir, chapters_dir=c_dir),
-    _check_image_refs(drafts_dir, rendered_md, cleaned_md),
+    _check_image_refs(
+      drafts_dir, rendered_md, cleaned_md,
+      final_dir=final_dir, stem=output_stem,
+    ),
     _check_html_structure(final_html),
   ]
 

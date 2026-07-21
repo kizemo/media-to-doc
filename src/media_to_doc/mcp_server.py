@@ -53,7 +53,7 @@ server: Server = Server("media-to-doc")
 
 INSTRUCTIONS = (
   "media-to-doc:把本地培训音视频转为带 AI 配图、可独立分发的 Markdown + HTML 讲义。\n"
-  "8 个工具(W7=6 + W8=2 LE 查询):\n"
+  "9 个工具(W7=6 + W8=2 LE 查询 + W12-D=1 多视频合并):\n"
   "  - list_courses: 列出 inbox 课程\n"
   "  - run_pipeline: 跑完整流水线\n"
   "  - resume_pipeline: 续跑中断的流水线\n"
@@ -61,7 +61,8 @@ INSTRUCTIONS = (
   "  - list_outputs: 列出产物文件\n"
   "  - read_lecture: 读讲义 (raw/cleaned/final 三版本)\n"
   "  - get_run_metrics: 读单课程 LE 元数据(state + pipeline_run + errors)\n"
-  "  - list_runs: 扫 workspace 所有 run 摘要(含跨 run LLM 健康度)"
+  "  - list_runs: 扫 workspace 所有 run 摘要(含跨 run LLM 健康度)\n"
+  "  - merge_lectures: 合并多视频讲义(章节重排 + 图片路径重写)"
 )
 
 
@@ -554,6 +555,35 @@ def tool_get_run_metrics(work_dir: str) -> dict[str, Any]:
   return get_run_metrics(work_dir)
 
 
+def tool_merge_lectures(
+  output_final_dir: str,
+  merged_name: str | None = None,
+  no_html: bool = False,
+) -> dict[str, Any]:
+  """W12-D 新增:合并多视频讲义(按用户新规第 3 条)。
+
+  Parameters
+  ----------
+  output_final_dir : str
+    output_final 目录路径(必填)
+  merged_name : str | None
+    合并产物名(去 .md 后缀)。默认 = 第一个视频 stem 去除序号
+  no_html : bool
+    跳过 HTML 渲染
+
+  Returns
+  -------
+  dict
+    含 merged_md / merged_html / copied_images / source_files 字段
+  """
+  from .pipeline.merge_lectures import merge_lectures
+
+  result = merge_lectures(
+    Path(output_final_dir), merged_name=merged_name, no_html=no_html,
+  )
+  return result.to_dict()
+
+
 def tool_list_runs(
   workspace_root: str | None = None,
   limit: int = 20,
@@ -841,6 +871,36 @@ async def handle_list_tools() -> list[types.Tool]:
       },
       annotations=types.ToolAnnotations(readOnlyHint=True),
     ),
+    types.Tool(
+      name="merge_lectures",
+      description=(
+        "W12-D 新增:合并多视频讲义为一份总讲义。"
+        "扫描 output_final_dir 下的 _cleaned.md,合并,文件名用第一个视频名(去序号),"
+        "章节全局重排,图片路径重写到 <merged>/images/<video>_<file>。"
+        "至少需要 2 个视频讲义。"
+      ),
+      inputSchema={
+        "type": "object",
+        "properties": {
+          "output_final_dir": {
+            "type": "string",
+            "description": "output_final 目录路径(必填,通常 <video>.parent/output_final)",
+          },
+          "merged_name": {
+            "type": "string",
+            "description": "合并产物文件名(去 .md 后缀);省略时用第一个视频名去序号",
+          },
+          "no_html": {
+            "type": "boolean",
+            "default": False,
+            "description": "跳过 HTML 渲染(只生成 md)",
+          },
+        },
+        "required": ["output_final_dir"],
+        "additionalProperties": False,
+      },
+      annotations=types.ToolAnnotations(destructiveHint=False),
+    ),
   ]
 
 
@@ -867,6 +927,8 @@ async def handle_call_tool(
       payload = tool_get_run_metrics(**args)
     elif name == "list_runs":
       payload = tool_list_runs(**args)
+    elif name == "merge_lectures":
+      payload = tool_merge_lectures(**args)
     else:
       raise ValueError(f"未知工具: {name!r}")
     return [types.TextContent(type="text", text=_json_dumps(payload))]
@@ -926,5 +988,6 @@ __all__ = [
   "tool_read_lecture",
   "tool_get_run_metrics",
   "tool_list_runs",
+  "tool_merge_lectures",
   "main",
 ]

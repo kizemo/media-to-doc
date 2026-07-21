@@ -310,7 +310,11 @@ def test_render_outputs_html_only_via_write_html_false(tmp_path: Path) -> None:
   _seed_chapter_md(drafts_dir, 1, "内容")
 
   out = render_outputs(
-    work, chapters_dir=cdir, drafts_dir=drafts_dir, write_html=False
+    work,
+    chapters_dir=cdir,
+    drafts_dir=drafts_dir,
+    write_html=False,
+    final_dir=tmp_path / "output_final",
   )
   assert out.md_path is not None and out.html_path is None
   assert out.md_path.exists()

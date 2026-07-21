@@ -76,8 +76,13 @@ def _chapters_wrapper(ctx: StageContext) -> Any:
 
   W10-C 新增:把派生出的 provider 注册到 ``ctx.metrics["llm_providers"]["chapters"]``,
   让 ``run_pipeline`` 末尾能聚合真实 llm_health(而非空字典)。
+
+  W12-D 新增:从 inbox + ctx.video 派生真视频名,作为 ``video_name`` 注入 chapters。
+  让 ``chapters.json video`` 字段填真视频文件名(去后缀、去末尾空格),
+  render / longdoc 后续从 chapters.json 读到,用作最终产物名。
   """
   from ..llm import get_provider
+  from .chapters import derive_video_name
 
   llm_cfg = ctx.config.llm
   provider = get_provider(
@@ -91,7 +96,8 @@ def _chapters_wrapper(ctx: StageContext) -> Any:
     num_ctx=llm_cfg.num_ctx,
   )
   ctx.metrics["llm_providers"]["chapters"] = provider
-  return split_chapters(ctx.work, provider, ctx.config)
+  video_name = derive_video_name(ctx.inbox, ctx.video)
+  return split_chapters(ctx.work, provider, ctx.config, video_name=video_name)
 
 
 def _draft_wrapper(ctx: StageContext) -> Any:
@@ -124,11 +130,14 @@ def _longdoc_wrapper(ctx: StageContext) -> Any:
   skip 模式下不注册 provider(避免 aggregator 误计一个 0 调用但有 name 的 provider)。
 
   W10-C:provider 注册到 ``ctx.metrics["llm_providers"]["longdoc"]``。
+
+  W12-D:传递 ``final_dir`` 给 ``process_long_doc``,让最终 cleaned.md + final.html
+  写到 ``<video>.parent / output_final/``(默认)。
   """
   from ..llm import get_provider
 
   if ctx.config.pipeline.longdoc_llm_provider == "skip":
-    return process_long_doc(ctx.work, None, ctx.config)
+    return process_long_doc(ctx.work, None, ctx.config, final_dir=ctx.final_dir)
 
   llm_cfg = ctx.config.llm
   provider = get_provider(
@@ -141,7 +150,9 @@ def _longdoc_wrapper(ctx: StageContext) -> Any:
     timeout_seconds=llm_cfg.timeout_seconds,
   )
   ctx.metrics["llm_providers"]["longdoc"] = provider
-  return process_long_doc(ctx.work, provider, ctx.config)
+  return process_long_doc(
+    ctx.work, provider, ctx.config, final_dir=ctx.final_dir
+  )
 
 
 STAGE_FUNCS: dict[str, Callable[..., Any]] = {
@@ -186,6 +197,10 @@ class StageContext:
     跨 stage 累积的运行时指标(W10-C:用于聚合 LLM 健康度)。
     默认 ``{"llm_providers": {}}``,wrapper 创建 provider 后注册:
     ``ctx.metrics["llm_providers"][stage_name] = provider``
+  final_dir : Path | None
+    W12-D 新增:最终产物目录(默认 ``<work>.parent / "output_final"``)。
+    由 ``run_pipeline`` 派生并落盘到 ``state.final_dir``,render / longdoc 用
+    来决定写 md/html 的目标位置。
   """
 
   inbox: Path
@@ -197,6 +212,7 @@ class StageContext:
   metrics: dict[str, Any] = field(
     default_factory=lambda: {"llm_providers": {}}
   )
+  final_dir: Path | None = None
 
   def resolve_video(self) -> Path:
     if self.video is None:
@@ -397,7 +413,7 @@ def _invoke_stage(stage: str, func: Callable[..., Any], ctx: StageContext) -> No
       raise FileNotFoundError(
         "render stage 需要 drafts 目录;请先跑 draft stage"
       )
-    func(ctx.work, ctx.config)
+    func(ctx.work, ctx.config, final_dir=ctx.final_dir)
     return
 
   if stage == "longdoc":
@@ -512,6 +528,8 @@ def run_pipeline(
   *,
   skip_completed: bool = True,
   stop_after: str | None = None,
+  final_dir: Path | None = None,
+  target_video: Path | None = None,
 ) -> PipelineResult:
   """完整流水线入口(W8:11 stage + LE 闭环)。
 
@@ -528,6 +546,13 @@ def run_pipeline(
     是否跳过已完成 stage(``mtd resume --force`` 用 ``False`` 表示强制重跑)
   stop_after : str | None
     指定 stage 名 → 跑到该 stage 后停下(便于调试)
+  final_dir : Path | None
+    W12-D 新增:最终产物目录(默认 ``<work>.parent / "output_final"``)。
+    落盘到 ``state.final_dir``,resume 时若不传则从 state 派生。
+  target_video : Path | None
+    W12-D 新增:用户指定的目标视频路径(已通过 find_media 选定)。
+    用于 :func:`chapters.derive_video_name` 派生 chapters.video 字段。
+    若为 ``None``,chapters stage 会调 :func:`audio.find_media` 兜底。
 
   Returns
   -------
@@ -578,6 +603,15 @@ def run_pipeline(
     state.inbox_path = str(inbox)
     state.save(state_path)
 
+  # W12-D:final_dir 派生:CLI 传 > state 已有 > 默认 <work>.parent / "output_final"
+  if final_dir is None:
+    final_dir = Path(state.final_dir) if state.final_dir else work.parent / "output_final"
+  final_dir = final_dir.resolve()
+  if state.final_dir != str(final_dir):
+    state.final_dir = str(final_dir)
+    state.save(state_path)
+  final_dir.mkdir(parents=True, exist_ok=True)
+
   # LE L3 沉淀层:logger(W8 新增)
   logger = PipelineLogger(work, course=state.course)
 
@@ -589,7 +623,14 @@ def run_pipeline(
 
   try:
     # W10-C:ctx 创建移到 loop 外,让 ctx.metrics 跨 stage 累积(LLM providers 注册需要)
-    ctx = StageContext(inbox=inbox, work=work, config=cfg)
+    # W12-D:ctx 注入 final_dir + target_video,供 render / longdoc / chapters 使用
+    ctx = StageContext(
+      inbox=inbox,
+      work=work,
+      config=cfg,
+      final_dir=final_dir,
+      video=target_video,
+    )
     for stage in STAGE_ORDER:
       if skip_completed and state.stages[stage].is_completed:
         completed_now.append(stage)

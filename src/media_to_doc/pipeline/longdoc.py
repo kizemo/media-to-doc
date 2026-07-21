@@ -564,26 +564,32 @@ def process_long_doc(
   source_md: Path | None = None,
   output_dir: Path | None = None,
   output_stem: str | None = None,
+  final_dir: Path | None = None,
   chunk_size: int = DEFAULT_CHUNK_SIZE,
   write_html: bool = True,
 ) -> LongDocResult:
   """Stage 10:深度净化 render 阶段产出的 markdown + 渲染最终 HTML。
 
+  W12-D 新规:最终 ``<stem>_cleaned.md`` + ``<stem>_final.html`` 写到
+  ``final_dir``(默认 ``<work>.parent / "output_final"``),与中间产物分离。
+
   Parameters
   ----------
   work : Path
-    work 根目录(默认 ``<work>/chapters/raw/<video_stem>/<stem>.md``)
+    work 根目录(中间产物根)
   provider : BaseLLMProvider | None
     LLM provider 实例;为 ``None`` 或属性 ``name == "skip"`` 时跳过 LLM
     净化(仅做规则清理)
   config : WorkflowConfig | None
     配置(预留,当前未读字段)
   source_md : Path | None
-    源 markdown(默认 ``<work>/chapters/raw/<video_stem>/<stem>.md``)
+    源 markdown(默认 ``<work>/chapters/raw/<video_stem>.md``)
   output_dir : Path | None
-    输出目录(默认 = ``source_md.parent``)
+    **保留参数**——向后兼容。优先级低于 ``final_dir``。
   output_stem : Path | None
-    输出文件 stem(默认 = ``source_md.stem``,不带 ``.md``)
+    输出文件 stem(默认 = 派生:``chapters.json video`` 或 ``source_md.stem``)
+  final_dir : Path | None
+    W12-D 新增:最终产物目录(默认 ``<work>.parent / "output_final"``)。
   chunk_size : int
     分块大小(CJK 字符数,默认 15000)
   write_html : bool
@@ -617,11 +623,26 @@ def process_long_doc(
       f"找不到源 markdown {source_md};请先跑 render stage"
     )
 
-  if output_dir is None:
-    output_dir = source_md.parent
+  # W12-D:输出目录优先级 = final_dir > output_dir > <work>.parent / "output_final"
   if output_stem is None:
-    output_stem = source_md.stem
-  output_dir.mkdir(parents=True, exist_ok=True)
+    # 优先用 chapters.json video 字段(真视频名),fallback 到 source_md.stem
+    chapters_dir = work / "chapters"
+    if (chapters_dir / "chapters.json").exists():
+      chapters_json = json.loads(
+        (chapters_dir / "chapters.json").read_text(encoding="utf-8")
+      )
+      output_stem = (chapters_json.get("video") or "").strip() or source_md.stem
+    else:
+      output_stem = source_md.stem
+
+  target_dir: Path
+  if final_dir is not None:
+    target_dir = final_dir
+  elif output_dir is not None:
+    target_dir = output_dir
+  else:
+    target_dir = work.parent / "output_final"
+  target_dir.mkdir(parents=True, exist_ok=True)
 
   text = source_md.read_text(encoding="utf-8")
   if not text.strip():
@@ -654,7 +675,7 @@ def process_long_doc(
       total_lines_stripped += stats.lines_stripped
 
   cleaned_text = "\n\n".join(c.rstrip() for c in cleaned_chunks).rstrip() + "\n"
-  cleaned_path = output_dir / f"{output_stem}{_CLEANED_SUFFIX}"
+  cleaned_path = target_dir / f"{output_stem}{_CLEANED_SUFFIX}"
   cleaned_path.write_text(cleaned_text, encoding="utf-8")
 
   # 4. 渲染最终 HTML
@@ -662,10 +683,10 @@ def process_long_doc(
   if write_html:
     final_path = render_final_html(
       cleaned_md=cleaned_path,
-      html_path=output_dir / f"{output_stem}{_FINAL_SUFFIX}",
+      html_path=target_dir / f"{output_stem}{_FINAL_SUFFIX}",
     )
   else:
-    final_path = output_dir / f"{output_stem}{_FINAL_SUFFIX}"
+    final_path = target_dir / f"{output_stem}{_FINAL_SUFFIX}"
 
   # 5. 统计
   chars_output = len(cleaned_text)

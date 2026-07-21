@@ -376,6 +376,7 @@ def split_chapters(
   config: WorkflowConfig | None = None,
   *,
   output_dir: Path | None = None,
+  video_name: str | None = None,
 ) -> ChaptersReport:
   """Stage 6:用 LLM 把全文切分为章节。
 
@@ -389,6 +390,10 @@ def split_chapters(
     配置(预留,当前未用)
   output_dir : Path | None
     章节输出目录,默认 ``<work>/chapters/``
+  video_name : str | None
+    真视频名(去后缀、去末尾空格)。W12-D 新增:由 runner 从 inbox +
+    target_video 派生后注入,落到 ``chapters.json video`` 字段,供
+    render / longdoc 用作最终产物文件名;留 ``None`` 时回退到 ``work.name``。
 
   Returns
   -------
@@ -423,9 +428,10 @@ def split_chapters(
     md_path = out_dir / _CHAPTER_FILENAME.format(idx=i)
     md_path.write_text(_render_chapter_markdown(chapter), encoding="utf-8")
 
-  # 4. 整体 manifest
+  # 4. 整体 manifest(W12-D:video 字段优先用 video_name,否则回退 work.name)
+  video = (video_name or work.name or "").strip() or "output"
   report = ChaptersReport(
-    video=work.name or "",
+    video=video,
     provider=response.provider,
     model=response.model,
     chapters=chapters,
@@ -434,10 +440,41 @@ def split_chapters(
   return report
 
 
+def derive_video_name(inbox: Path, target_video: Path | None = None) -> str | None:
+  """W12-D 新增:从 inbox + target_video 派生真视频名(去后缀、去末尾空格)。
+
+  用于 chapters / render / longdoc 的 ``video`` 字段,以及最终产物文件名。
+  用户视频名常含末尾空格(如 ``01_先精准后放大的打爆策略 .mp4``),需 ``rstrip()``。
+
+  Parameters
+  ----------
+  inbox : Path
+    inbox 目录(用于 find_media 兜底)
+  target_video : Path | None
+    用户指定的目标视频;``None`` 时用 :func:`audio.find_media` 派生。
+    inbox 内也没有媒体时,返回 ``None``(调用方应回退到 ``work.name``)。
+
+  Returns
+  -------
+  str | None
+    视频 stem(去后缀、去末尾空格);无法派生时返回 ``None``。
+  """
+  if target_video is None:
+    try:
+      from .audio import find_media
+
+      target_video = find_media(inbox)
+    except FileNotFoundError:
+      return None
+  stem = target_video.stem.rstrip()
+  return stem or None
+
+
 __all__ = [
   "Chapter",
   "ChaptersReport",
   "DEFAULT_MIN_CHAPTER_SECONDS",
   "DEFAULT_MAX_CHAPTER_SECONDS",
   "split_chapters",
+  "derive_video_name",
 ]

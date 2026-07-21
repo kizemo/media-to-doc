@@ -39,6 +39,8 @@ def _fake_run_pipeline(
   *,
   skip_completed: bool = True,
   stop_after: str | None = None,
+  final_dir: Path | None = None,
+  target_video: Path | None = None,
 ) -> Any:
   """替换 ``run_pipeline`` 的 stub:模拟 inbox 派生 + 写 state.json。
 
@@ -95,10 +97,13 @@ def _patch_runner(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     *,
     skip_completed: bool = True,
     stop_after: str | None = None,
+    final_dir: Path | None = None,
+    target_video: Path | None = None,
   ) -> Any:
     result = _fake_run_pipeline(
       inbox, work, config,
       skip_completed=skip_completed, stop_after=stop_after,
+      final_dir=final_dir, target_video=target_video,
     )
     # captured 存派生后的 inbox(与真 run_pipeline 一致)
     captured.append({
@@ -107,6 +112,8 @@ def _patch_runner(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
       "config": config,
       "skip_completed": skip_completed,
       "stop_after": stop_after,
+      "final_dir": final_dir,
+      "target_video": target_video,
     })
     return result
 

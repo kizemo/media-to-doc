@@ -231,7 +231,12 @@ def run(
     None,
     "--work-dir",
     "-w",
-    help="work 目录(默认 <inbox>/output)",
+    help="work 目录(默认 <inbox>/output,中间产物)",
+  ),
+  final_dir: Path | None = typer.Option(
+    None,
+    "--final-dir",
+    help="W12-D 新增:最终 md/html 产物目录(默认 <inbox>/output_final)",
   ),
   llm: str | None = typer.Option(
     None,
@@ -295,10 +300,15 @@ def run(
   inbox = inbox.resolve()
   work = (work_dir or inbox / "output").resolve()
   work.mkdir(parents=True, exist_ok=True)
+  # W12-D:final_dir CLI 默认 = <work>.parent / "output_final",也可显式覆盖
+  if final_dir is None:
+    final_dir = (work_dir or inbox / "output").parent / "output_final"
+  final_dir = final_dir.resolve()
 
   # inbox 自动隔离(避免多视频误选 + 避免扫到 work_dir 下的中间产物)
   moved: list[tuple[Path, Path]] = []
   staging_dir: Path | None = None
+  target_video: Path | None = None
   if not no_isolate:
     try:
       target_video = find_media(inbox, exclude_dirs=[work])
@@ -329,6 +339,8 @@ def run(
       config=cfg,
       skip_completed=not force,
       stop_after=stop_after,
+      final_dir=final_dir,
+      target_video=target_video,
     )
   except Exception as exc:
     if json_output:
@@ -402,6 +414,11 @@ def resume(
     dir_okay=True,
     readable=True,
   ),
+  final_dir: Path | None = typer.Option(
+    None,
+    "--final-dir",
+    help="W12-D 新增:覆盖 state.json 里记录的 final_dir(默认从 state.final_dir 派生)",
+  ),
   stop_after: str | None = typer.Option(
     None,
     "--stop-after",
@@ -439,6 +456,8 @@ def resume(
       console.print(f"[bold]inbox[/bold]  {inbox}  [dim](override)[/dim]")
     else:
       console.print("[bold]inbox[/bold]  [dim](auto from state.json)[/dim]")
+    if final_dir is not None:
+      console.print(f"[bold]final_dir[/bold] {final_dir}  [dim](override)[/dim]")
 
   try:
     result = run_pipeline(
@@ -446,6 +465,7 @@ def resume(
       work=work,
       skip_completed=not force,
       stop_after=stop_after,
+      final_dir=final_dir,
     )
   except Exception as exc:
     if json_output:
@@ -500,6 +520,7 @@ def status(
     payload = {
       "course": state.course,
       "inbox_path": state.inbox_path,
+      "final_dir": state.final_dir,
       "current_stage": state.current_stage,
       "started_at": state.started_at,
       "updated_at": state.updated_at,
@@ -542,6 +563,8 @@ def status(
   console.print(table)
   if state.inbox_path:
     console.print(f"[dim]inbox_path: {state.inbox_path}[/dim]")
+  if state.final_dir:
+    console.print(f"[dim]final_dir: {state.final_dir}[/dim]")
   if state.is_complete():
     console.print("[green]全部 stage 已完成[/green]")
   else:
@@ -610,6 +633,67 @@ def list_(  # noqa: A001
       str(c["media_count"]),
     )
   console.print(table)
+
+
+# ─────────────────────────────────────────────────────────────
+# mtd merge — 多视频讲义合并(W12-D 新增)
+# ─────────────────────────────────────────────────────────────
+
+
+@app.command()
+def merge(
+  output_final_dir: Path = typer.Argument(
+    ...,
+    help="output_final 目录(默认 <video>.parent/output_final)",
+    exists=True,
+    file_okay=False,
+    dir_okay=True,
+    readable=True,
+  ),
+  name: str | None = typer.Option(
+    None,
+    "--name",
+    "-n",
+    help="合并产物文件名(去 .md/.html 后缀)。默认 = 第一个视频 stem 去除序号",
+  ),
+  no_html: bool = typer.Option(
+    False,
+    "--no-html",
+    help="跳过 HTML 渲染(只生成 md)",
+  ),
+  json_output: bool = typer.Option(
+    False,
+    "--json",
+    help="JSON 输出",
+  ),
+) -> None:
+  """合并多视频讲义(按用户新规第 3 条)。
+
+  扫描 ``<output_final_dir>/<video>*.md``,合并为一份总讲义,文件名用第一个视频名
+  (去除序号),章节序号全局重排,图片路径重写到 ``<merged>/images/<video>_<file>``。
+  """
+  from .pipeline.merge_lectures import merge_lectures
+
+  try:
+    result = merge_lectures(output_final_dir, merged_name=name, no_html=no_html)
+  except (FileNotFoundError, ValueError) as exc:
+    if json_output:
+      console.print_json(data={"error": f"{type(exc).__name__}: {exc}"})
+    else:
+      eprint(f"[red]ERR:[/red] {exc}")
+    raise typer.Exit(code=2) from None
+
+  if json_output:
+    console.print_json(data=result.to_dict())
+    return
+
+  console.print("[bold green]合并完成[/bold green]")
+  console.print(f"  [bold]merged_name[/bold]  {result.merged_name}")
+  console.print(f"  [bold]source_files[/bold] {len(result.source_files)}")
+  console.print(f"  [bold]copied_images[/bold] {result.copied_images}")
+  console.print(f"  [bold]merged_md[/bold]   {result.merged_md}")
+  if result.merged_html:
+    console.print(f"  [bold]merged_html[/bold] {result.merged_html}")
 
 
 # ─────────────────────────────────────────────────────────────

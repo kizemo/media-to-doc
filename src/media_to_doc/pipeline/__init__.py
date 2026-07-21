@@ -32,19 +32,22 @@ from . import (
   frames,
   imagegen,
   longdoc,
+  merge_lectures,
   ocr,
   render,
   runner,
   verify,
 )
+from . import merge_lectures as _merge_lectures_module  # noqa: F401
 from .asr import transcribe
 from .asr_correct import correct_asr
 from .audio import prepare_audio
-from .chapters import split_chapters
+from .chapters import derive_video_name, split_chapters
 from .draft import generate_drafts
 from .frames import KeyFrame, extract_keyframes
 from .imagegen import generate_images
 from .longdoc import process_long_doc, render_final_html
+from .merge_lectures import MergeResult, strip_leading_index
 from .ocr import run_ocr
 from .render import render_html, render_outputs
 from .runner import (
@@ -63,12 +66,16 @@ __all__ = [
   "run_ocr",
   "correct_asr",
   "split_chapters",
+  "derive_video_name",
   "generate_drafts",
   "generate_images",
   "render_outputs",
   "render_html",
   "process_long_doc",
   "render_final_html",
+  "merge_lectures",
+  "MergeResult",
+  "strip_leading_index",
   "verify_pipeline",
   "VerifyReport",
   "run_stage",
@@ -83,6 +90,7 @@ __all__ = [
   "frames",
   "imagegen",
   "longdoc",
+  "merge_lectures",
   "ocr",
   "render",
   "runner",

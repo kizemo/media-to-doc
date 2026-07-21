@@ -83,6 +83,9 @@ class State:
   stages: dict[str, StageState] = field(default_factory=dict)
   # 源 inbox 绝对路径(W6 写入,resume 时不传 inbox 也能派生)
   inbox_path: str | None = None
+  # W12-D 新增:最终产物目录绝对路径(默认 ``<inbox>.parent / "output_final"``)
+  # resume 时不传 final_dir 也能派生
+  final_dir: str | None = None
 
   # ── 构造 ────────────────────────────────────────────────
 
@@ -143,6 +146,7 @@ class State:
       "updated_at": self.updated_at,
       "current_stage": self.current_stage,
       "inbox_path": self.inbox_path,
+      "final_dir": self.final_dir,
       "stages": {name: stage.to_dict() for name, stage in self.stages.items()},
     }
 

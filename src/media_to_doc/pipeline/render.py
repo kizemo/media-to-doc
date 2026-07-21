@@ -323,14 +323,31 @@ def render_outputs(
   drafts_dir: Path | None = None,
   output_dir: Path | None = None,
   output_stem: str | None = None,
+  final_dir: Path | None = None,
   write_html: bool = True,
 ) -> RenderOutputs:
   """Stage 9:拼装最终讲义 markdown (+ 可选 HTML)。
 
+  W12-D 新规:最终产物写到 ``final_dir``(默认 ``<work>.parent / "output_final"``),
+  与中间产物 ``<work>`` 分离。
+
+  布局约定(自包含,可整盘分发):
+
+  ::
+
+      <final_dir>/
+      ├── <stem>.md           ← 拼装讲义 markdown
+      ├── <stem>.html         ← 渲染 HTML
+      └── <stem>/
+          └── images/         ← 从 drafts_dir/images/ 复制过来
+
+  最终产物用真视频名(``chapters.json video``)命名,图像引用保持
+  ``<stem>/images/gen_xxx.png`` 相对路径不变。
+
   Parameters
   ----------
   work : Path
-    work 根目录
+    work 根目录(中间产物根)
   config : WorkflowConfig | None
     配置(预留)
   chapters_dir : Path | None
@@ -338,9 +355,12 @@ def render_outputs(
   drafts_dir : Path | None
     ``chapter_NN.md`` 所在目录(默认 ``<chapters_dir>/raw/<video_stem>``)
   output_dir : Path | None
-    最终产物目录(默认 ``<drafts_dir>/..`` — 即 ``<chapters_dir>/raw/``)
+    **保留参数**——兼容性 fallback。优先级低于 ``final_dir``。
   output_stem : str | None
-    输出文件名(默认 = ``drafts_dir.name``)
+    输出文件名(默认 = ``chapters.json video`` 字段,W12-D 起即真视频名)
+  final_dir : Path | None
+    W12-D 新增:最终产物目录(默认 ``<work>.parent / "output_final"``)。
+    ``<final_dir>/<output_stem>.md`` + ``.html`` + ``<final_dir>/<output_stem>/images/`` 写到此处。
   write_html : bool
     是否同时写 HTML(默认 True)
 
@@ -366,15 +386,34 @@ def render_outputs(
     raise FileNotFoundError(
       f"找不到 drafts_dir {drafts_dir};请先跑 draft stage"
     )
-  if output_dir is None:
-    output_dir = drafts_dir.parent
+
+  # W12-D:output_stem 优先用 report.video(真视频名)
   if output_stem is None:
-    output_stem = drafts_dir.name
+    output_stem = report.video or "output"
 
-  output_dir.mkdir(parents=True, exist_ok=True)
+  # W12-D:最终产物目录(默认 <work>.parent / "output_final")
+  if final_dir is None:
+    final_dir = work.parent / "output_final"
+  final_dir.mkdir(parents=True, exist_ok=True)
 
-  # 计算图像相对路径前缀(从 ``<output_dir>/<stem>.md`` 到 ``images/``):
-  # ``image_prefix`` = "<stem>/images"
+  # 兼容旧调用:若 output_dir 显式传了,优先用(向后兼容)
+  target_dir = output_dir or final_dir
+
+  # W12-D:把 drafts_dir/images/ 复制到 final_dir/<stem>/images/(自包含)
+  # 先建子目录,再复制(避免后面 image 引用 broken)
+  final_subdir = target_dir / output_stem
+  final_images = final_subdir / "images"
+  final_images.parent.mkdir(parents=True, exist_ok=True)
+  drafts_images = drafts_dir / "images"
+  if drafts_images.exists():
+    import shutil
+
+    if final_images.exists():
+      shutil.rmtree(final_images)
+    shutil.copytree(drafts_images, final_images)
+
+  # 计算图像相对路径前缀(从 ``<target_dir>/<stem>.md`` 到 ``<stem>/images/``):
+  # ``image_prefix`` = "<stem>/images"(与 W3 既有布局一致)
   image_prefix = f"{output_stem}/images"
 
   # 读取每章节正文 + 重写图像引用
@@ -394,14 +433,14 @@ def render_outputs(
 
   # 拼装 markdown
   md_text = _assemble_markdown(report, body_lookup)
-  md_path = output_dir / f"{output_stem}.md"
+  md_path = target_dir / f"{output_stem}.md"
   md_path.write_text(md_text, encoding="utf-8")
 
   html_path: Path | None = None
   if write_html:
     body_html = _render_markdown_to_html(md_text)
     full_html = _wrap_html_body(body_html, report.video or output_stem)
-    html_path = output_dir / f"{output_stem}.html"
+    html_path = target_dir / f"{output_stem}.html"
     html_path.write_text(full_html, encoding="utf-8")
 
   return RenderOutputs(

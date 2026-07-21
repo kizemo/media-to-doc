@@ -109,26 +109,69 @@ F:\soft\00selfmade\media-to-doc\
 
 `_research/` 目录**不进 git**,只在项目启动/调研阶段保留;当代码落地后可以归档或删除。
 
-### 4.1 输出目录约定(W5+ 用户确认,2026-07-18)
+### 4.1 输出目录约定(W5+ 用户确认,2026-07-18;W12-D 拆分最终产物,2026-07-21)
 
-流水线产物默认输出到 **视频所在目录的 `output` 子目录**(与视频同盘,便于整盘
-复制 / 上传 / 知识库归档)。**这是项目级约定**,所有调用入口
-(`scripts/run_smoke.py`、未来的 `mtd run` / `mtd resume`、MCP server)默认都遵循。
+流水线产物默认输出到 **视频所在目录**(与视频同盘,便于整盘复制 / 上传 /
+知识库归档)。**这是项目级约定**,所有调用入口(`scripts/run_smoke.py`、
+`mtd run` / `mtd resume` / `mtd merge`、MCP server)默认都遵循。
 
-- `inbox_dir = <video>.parent`(放视频的目录)
-- `work_dir  = <video>.parent / "output"`(同目录的 `output` 子目录)
-- 默认入口:`uv run python scripts/run_smoke.py <video.mp4>`
-- 自定义 work_dir:`--work-dir D:/anywhere`(支持任意路径,常用于 CI 或共享盘)
-- **已有产物保护**:跑前确认 `output/` 无冲突;若有旧产物,先备份到
-  `output-backup-YYYY-MM-DD/`(参见 W5 端到端冒烟会话
-  `handoff-pipeline-w5-smoke-2026-07-18.md`)
+#### 4.1.1 拆分(2026-07-21,W12-D)
+
+中间产物(11 stage 调度的 state / 中间文件)与最终产物(md / html 讲义)**分离**:
+
+- `inbox_dir  = <video>.parent`(放视频的目录)
+- `work_dir   = <video>.parent / "output"`(中间产物根,state.json 在此)
+- `final_dir  = <video>.parent / "output_final"`(**最终 md/html**,自包含可分发)
+- 自定义:`--work-dir` / `--final-dir`(支持任意路径,常用于 CI / 共享盘)
+
+最终产物布局(`<final_dir>/`):
+
+```
+output_final/
+├── <真视频名>.md          ← 拼装讲义 markdown(去后缀、去末尾空格)
+├── <真视频名>.html        ← 渲染 HTML(含 v1.0.1 mermaid + tasklist 修复)
+└── <真视频名>/
+    └── images/            ← AI 配图(从 drafts_dir/images/ 复制,自包含)
+```
+
+**多视频合并**(`mtd merge`):
+
+```
+output_final/
+├── 01_先精准后放大_cleaned.md    ← 单视频讲义(讲师版)
+├── 01_先精准后放大/
+│   └── images/
+├── 02_拉新成交_cleaned.md
+├── 02_拉新成交/
+│   └── images/
+├── 先精准后放大_cleaned.md       ← 合并产物(文件名 = 第一个 stem 去序号)
+├── 先精准后放大_cleaned.html
+└── 先精准后放大/
+    └── images/                  ← 合并后的图片,命名 <video>_<file>.png
+```
+
+#### 4.1.2 兼容性策略
+
+W12-D 默认新规 + **旧产物只读兼容**:
+- gatekeeper / verify 优先查 `output_final/<stem>.md`,回退旧布局
+  `output/chapters/raw/<stem>.md`
+- `<stem>` 真视频名(从 chapters.json video 字段读,W12-D 起 = `derive_video_name(inbox)`)
+- 旧产物不会自动迁移(用户需要时可用 `mtp` 一键复制)
+
+#### 4.1.3 已有产物保护
+
+跑前确认 `output/` 与 `output_final/` 无冲突;若有旧产物,先备份到
+`output-backup-YYYY-MM-DD/`(参见 W5 端到端冒烟会话
+`handoff-pipeline-w5-smoke-2026-07-18.md`)。
 
 为什么这样设计:
 
-- **可分发**:讲义和原视频同盘,整盘复制 / 网盘上传 / 知识库归档时路径不会断裂
-- **相对路径**:render 产物用 `images/<file>` 等相对路径,跨机器鲁棒
+- **可分发**:`output_final/` 自包含,整盘复制 / 网盘上传 / 知识库归档时
+  `images/` 在讲义同目录,路径不会断裂
+- **相对路径**:render 产物用 `<stem>/images/<file>` 等相对路径,跨机器鲁棒
 - **零全局污染**:不在 `~/Documents` / 全局 `workspace/` 等散落产物
-- **可覆盖**:`--work-dir` 满足 CI / 多输出场景
+- **可覆盖**:`--work-dir` / `--final-dir` 满足 CI / 多输出场景
+- **中间 vs 最终分离**:用户找讲义只看 `output_final/`,不需要扫 `output/chapters/raw/` 等嵌套
 
 ---
 

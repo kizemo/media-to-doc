@@ -197,6 +197,16 @@
   - [x] commit:`fix(pipeline): W12-C — v1.0.1 mermaid + GFM tasklist HTML rendering`(`a024045`)
   - [x] handoff:`handoff-pipeline-w12-c-patch-2026-07-20.md`
 
+- [~] **F. v1.1.0 multi-video layout + merge**(W12-D,2026-07-21,~1.5-2h 进行中)
+  - 新规(用户 2026-07-21 拍板):
+    1. **中间 vs 最终分离**:中间产物(ASR/frames/OCR/chapters/drafts/state) → `<video>.parent / output/`;
+       最终 md/html → `<video>.parent / output_final/`
+    2. **真视频名**:chapters.video + 最终文件名 = 真视频文件名(去后缀,处理末尾空格/序号)
+    3. **多视频合并**:新增 `merge_lectures` skill + CLI `mtd merge` + MCP 工具,合并多份讲义,序号全局重排,文件名 = 第一个 stem 去序号
+    4. **图片路径重写**:合并产物图片统一放 `<merged_name>/images/<video_stem>_<file>`
+  - 兼容性:**默认新规 + 旧产物只读兼容**(gatekeeper / verify 优先 `output_final/` 回退 `output/chapters/raw/`)
+  - v1.1.0 minor release(breaking layout + 新 feature)
+
 ---
 
 ## Phase 7 — 文档与示例(L2)

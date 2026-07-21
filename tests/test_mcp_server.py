@@ -462,14 +462,15 @@ def test_read_lecture_file_missing(tmp_path: Path) -> None:
 # ─────────────────────────────────────────────────────────────
 
 
-def test_list_tools_returns_eight() -> None:
-  """handle_list_tools 返回 8 个 Tool(W7=6 + W8=2),带 readOnlyHint 标注。"""
+def test_list_tools_returns_nine() -> None:
+  """handle_list_tools 返回 9 个 Tool(W7=6 + W8=2 + W12-D=1 merge),带 readOnlyHint 标注。"""
   tools = asyncio.run(mcp_server.handle_list_tools())
   names = {t.name for t in tools}
   assert names == {
     "list_courses", "run_pipeline", "resume_pipeline",
     "check_status", "list_outputs", "read_lecture",
     "get_run_metrics", "list_runs",
+    "merge_lectures",  # W12-D
   }
   # 6 个 read-only 工具(W7=4 + W8=2)
   read_only = {t.name for t in tools if t.annotations and t.annotations.readOnlyHint}
