@@ -242,6 +242,20 @@
   - **诊断脚本**:`scripts/_w13c_diag_fusion_ssl.py`(可复用,验证 ollama 健康 + prompt 大小边界)
   - **commit**:`fix(scripts): W13-C — filter proxy vars from fusion subprocess env`
 
+- [x] **W14-A v1.2.1 patch 发布**(2026-07-21,~30min)
+  - 合并:`fix/pipeline-w13-longdoc-w12d-compat`(3 commit) → `release/v1.0`(`--no-ff`)
+  - bump:pyproject 1.2.0 → 1.2.1 + uv.lock 同步 + test_smoke.py 版本断言 + 3 个 scripts ruff F401 修
+  - 文档:CHANGELOG 加 `[1.2.1]` 节 + `docs/RELEASE_NOTES_v1.2.1.md`(gh release form)
+  - PyPI:`media_to_doc-1.2.1-py3-none-any.whl`(136KB)+ `media_to_doc-1.2.1.tar.gz`(591KB)
+    - keyring + `UV_PUBLISH_TOKEN` env var 流程(W12-A 验证)
+    - PyPI JSON API 验证:`latest=1.2.1`,5 个 v1.x release 全在(`1.0.0/1.0.1/1.1.0/1.2.0/1.2.1`)
+  - GitHub Release:`https://github.com/kizemo/media-to-doc/releases/tag/v1.2.1`
+    - 2 assets 上传(wheel + sdist)+ SHA256 verified
+  - 测试:595 passed / 0 skipped,ruff clean
+  - tag:annotated `v1.2.1`(已 push 到 origin)
+  - commit:`docs(release): W14-A — v1.2.1 patch (longdoc W12-D 3 级 fallback + fusion proxy fix)`(`8da9e7b`)
+  - handoff:`handoff-pipeline-w13-02-longdoc-fix-2026-07-21.md`(fix 分支已写,合并后 release/v1.0 也有)
+
 ---
 
 ## Phase 7 — 文档与示例(L2)

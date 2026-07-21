@@ -361,18 +361,21 @@ print(f"total_runs={runs['total_runs']}, llm_health={runs['llm_health_global']}"
 
 ## 10. 后续规划
 
-> v1.0.0 已 GA 发布到 PyPI(W12-A 完成,2026-07-20)。下表为 v1.0+ 后续工作。
+> 当前最新发布:**v1.2.1**(2026-07-21,W14-A)—
+> [PyPI](https://pypi.org/project/media-to-doc/) +
+> [GitHub Release](https://github.com/kizemo/media-to-doc/releases/tag/v1.2.1)。
+> 595 pytest / 0 跳过。下表为 v1.0+ 已发布与待开始项。
 
-| 阶段 | 内容 | 状态 |
+| 版本 | 内容 | 状态 |
 |---|---|---|
-| ~~启动 / L0-L2 (W0-W11)~~ | 全部 ✅ | 已完成 |
-| **PyPI 上线** | `uv pip install media_to_doc` | ✅ W12-A |
-| **GitHub release 真实发布** | push + `gh release create v1.0.0` | 待用户配 git remote |
-| **v1.0.1 patch** | 修 W11-C §4 标记的 2 个 HTML 渲染降级(mermaid 流程图 / GFM task list) | 待开始 |
-| **v1.1 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 | 待开始(Phase 2) |
-| **v1.2 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始(Phase 3) |
-| **L3 - 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
-| **PyPI 维护** | v1.x 后续 patch / minor release 流程 | 维护期 |
+| v1.0.0 | First stable release — 11 stage 流水线 + LE 闭环 + 3 种调用方式 | ✅ W11-B + W12-A + W12-B |
+| v1.0.1 | mermaid 流程图 + GFM task list HTML 渲染降级修复 | ✅ W12-C |
+| v1.1.0 | multi-video layout(`output_final/` 分离 + 真视频名 + `merge_lectures`) | ✅ W12-D |
+| v1.2.0 | LLM-driven chapter fusion(W12-D 硬切 → LLM 内容融合) | ✅ W12-E |
+| v1.2.1 | longdoc W12-D 3 级 fallback + fusion proxy 隔离(W13-A 撞出的 2 个 P1 bug) | ✅ W14-A |
+| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 | 待开始 |
+| **v1.4 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始 |
+| **L3 — 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
 
 ### v1.x 发布流程(已建立)
 
