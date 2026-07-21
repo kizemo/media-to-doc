@@ -231,3 +231,49 @@ mtd merge <output_final_dir> --fusion ollama [--fusion-model qwen3:14b]
 - **端到端 LLM fusion 实跑**:qwen3:14b,29.5s,7 融合章节(原 14 个),`include=summary` 正确处理雷同内容
 
 [1.2.0]: https://github.com/kizemo/media-to-doc/releases/tag/v1.2.0
+
+---
+
+## [1.2.1] - 2026-07-21
+
+### 🩹 Hotfix: longdoc W12-D 兼容 + fusion proxy 隔离
+
+W13-A 真跑 01.mp4 端到端时撞出两个 P1 bug:
+
+1. **`longdoc.py` 找不到 W12-D 后的源讲义**(`d4c1465`)— `process_long_doc` 假设
+   `<work>/chapters/raw/<video>.md` 单文件布局,W12-D 把 render 产物移到
+   `<final_dir>/<video>.md` 后该路径不存在 → longdoc 找不到源 → 自动 fallback
+   到拼装草稿(质量降级)。
+2. **`merge_lectures` ollama 子进程 SSL 错误**(`cb992e5`)— 公司 VPN proxy vars
+   (`HTTP_PROXY` 等 8 个)泄漏到 fusion 子进程 env,ollama SDK httpx 走代理后
+   报 SSL unknown error → fusion 实际走 fallback 硬切(quality 隐性降级)。
+
+### Fixed
+
+- **longdoc W12-D 兼容 3 级 fallback**:`_resolve_source_md(work, video, final_dir)`
+  helper,按优先级查找:
+  1. `<final_dir>/<video>.md`(W12-D 真相位置,render 已拼装好的讲义)
+  2. `<work>/chapters/raw/<video>.md`(W3-W11 旧布局,向后兼容)
+  3. `<work>/chapters/raw/<video>/chapter_*.md` 拼装(W12-D 中间产物应急)
+- **fusion proxy 隔离**:子进程 env 显式剔除 8 个 proxy vars
+  (`HTTP_PROXY` / `HTTPS_PROXY` / `http_proxy` / `https_proxy` /
+   `ALL_PROXY` / `all_proxy` / `NO_PROXY` / `no_proxy`),避免 ollama httpx
+   误走代理
+
+### Added
+
+- `scripts/_w13b_verify_longdoc_fix.py` — 验证 longdoc fix 的真跑工具
+- `scripts/_w13c_diag_fusion_ssl.py` — ollama SSL 健康 + prompt 大小诊断
+- `tests/test_pipeline/test_longdoc_w12d_compat.py` — 13 新用例覆盖 3 路径
+
+### Tested
+
+- **595 pytest 用例 / 0 跳过**(1.2.0 575 → 1.2.1 595,+20)
+  - 13 longdoc W12-D 兼容测试(3 路径 + 集成 + fallback + 拼装)
+  - 7 既有 longdoc 测试不变,3 级 fallback 完全向后兼容
+- **ruff**:All checks passed
+- **W13-A 真跑 01.mp4 验证**:`_w13a_inbox/output_final/01_先精准后放大的打爆策略.md`
+  → longdoc source 自动选 W12-D 真讲义(+1.4% chars,含 TOC/摘要/要点/关键帧)
+- **W13-C 重跑 fusion 验证**:proxy 隔离后 7 H2 LLM 融合产物(此前 10 H2 是 fallback 硬切)
+
+[1.2.1]: https://github.com/kizemo/media-to-doc/releases/tag/v1.2.1

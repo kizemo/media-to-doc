@@ -26,9 +26,9 @@ from media_to_doc.state import STAGE_ORDER, State
 # ─────────────────────────────────────────────────────────────
 
 
-def test_version_is_1_2_0() -> None:
-  """当前版本号 = 1.2.0(W12-E LLM-driven chapter fusion,从安装元数据或 pyproject 同步)。"""
-  assert __version__ == "1.2.0"
+def test_version_is_1_2_1() -> None:
+  """当前版本号 = 1.2.1(W13-B longdoc W12-D 3 级 fallback + W13-C fusion proxy 过滤,从安装元数据或 pyproject 同步)。"""
+  assert __version__ == "1.2.1"
 
 
 def test_stage_order_has_11_stages() -> None:

@@ -3,7 +3,6 @@
 Usage: uv run --project F:/soft/00selfmade/media-to-doc python scripts/_w13a_poll_loop.py
 """
 import json
-import sys
 import time
 from pathlib import Path
 

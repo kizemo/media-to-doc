@@ -3,7 +3,6 @@
 Exits with sentinel at /tmp/w13a_verify_done.flag containing timestamp and final status.
 """
 import json
-import sys
 import time
 from datetime import datetime
 from pathlib import Path

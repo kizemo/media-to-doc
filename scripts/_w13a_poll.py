@@ -3,7 +3,6 @@
 Tracked pipeline: 01.mp4 (W13-A first real end-to-end run after W12-F).
 """
 import json
-import sys
 from pathlib import Path
 
 WORK_STATE = Path(r"E:/resource/2026-01-27_年度复训/_w13a_inbox/output/state.json")
