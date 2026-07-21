@@ -207,6 +207,26 @@
   - 兼容性:**默认新规 + 旧产物只读兼容**(gatekeeper / verify 优先 `output_final/` 回退 `output/chapters/raw/`)
   - v1.1.0 minor release(breaking layout + 新 feature)
 
+- [~] **W13-A 真跑 01.mp4 端到端 + LLM fusion 验证**(2026-07-21,~5h+)
+  - 起点:承接 W12-F,用户第一轮反馈"01.mp4 没处理过"
+  - 视频:`E:\resource\2026-01-27_年度复训\01_先精准后放大的打爆策略 .mp4`(506MB / ~111min)
+  - 备份:`output/` + `output_final/` → `output-backup-2026-07-21/` + `output_final-backup-2026-07-21/`
+  - 隔离:NTFS hardlink `_w13a_inbox\01_先精准后放大的打爆策略 .mp4`
+  - pipeline:asr(2.5GB CPU fp16)→ frames → ocr → asr_correct → chapters(LLM ollama) → draft → imagegen(skip) → render → longdoc(active ollama) → verify
+  - env 三件套:unset proxy + HF_ENDPOINT=hf-mirror.com + HF_HUB_DISABLE_XET=1
+  - 04:01 pipeline 启动,音频抽 5.9s 完成;14:08 ASR 转 82 段/302s(估计 5h+)
+  - 90min mark:2026-07-21T15:31 → 检查 ASR 进度,卡 50%+ 即 taskkill 接受 85% transcript
+  - 验收点:
+    - [ ] chapters.json video 字段 = "01_先精准后放大的打爆策略"(非 "output",W12-D derive_video_name 验证)
+    - [ ] output_final/01_先精准后放大的打爆策略_{cleaned.md, final.html} 存在
+    - [ ] verify + gatekeeper 一致 PASS
+    - [ ] pipeline_run.json llm_health 含 chapters_ollama + draft_ollama + longdoc_ollama
+  - fusion 验证(W12-E LLM fusion):合并 01+03 → `_w13a_fusion/年度复训综合_cleaned.md`,验证:
+    - [ ] 7+ 全局章节
+    - [ ] include 字段含 all / summary / first_n:N 至少 2 种
+  - cleanup:`rm -rf _w13a_inbox _w13a_fusion`
+  - commit + handoff:`handoff-pipeline-w13-01-real-2026-07-21.md`
+
 ---
 
 ## Phase 7 — 文档与示例(L2)
