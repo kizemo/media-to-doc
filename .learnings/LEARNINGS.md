@@ -298,3 +298,20 @@ faster-whisper / diffusers / anthropic 等重依赖。
 - "启示"段必须可复用(其它项目也适用),不能只描述本项目特定 case
 - W+ 数字 = W1/W2/.../W9 的开发会话标识,新增条目按 `LP-YYYYMMDD-NNN` 自增编号
 - 重复出现的 ERRORS.md Pattern-Key 由 LE L4 进化层自动晋升到本文件(参见 `.learnings/ERRORS.md`)
+
+## LP-20260722-W14D-001 — 全 LLM provider 一律 trust_env=False
+
+**Pattern-Key**: `HTTP_PROXY:trust_env`
+
+**Context**: W14-B(commit `427d963`)修了 `OllamaProvider._ensure_client` 透传 `trust_env=False`,但 Anthropic / OpenAICompat 当时未同步。W14-D 补全两个 provider 的同等改造,达到全栈一致。
+
+**Rule**: 任何新加的 LLM provider 在 `_ensure_client` 构造 SDK 客户端时,必须透传 `http_client=httpx.Client(trust_env=False)`(若 SDK ≥ 0.20 / openai ≥ 1.40 接受 http_client 参数)。这是 **defense in depth**:即使脚本侧(W13-C)已过滤 8 个 proxy vars,代码层也保证 SDK 内部 httpx 不会读 `HTTP_PROXY` 等环境变量。
+
+**Why**: 公司 VPN 父 shell 在用户登录时设置 `HTTP_PROXY=http://127.0.0.1:49223` 等代理变量。若 SDK 默认 `trust_env=True`,内部 httpx 会把 api.anthropic.com / 7 个 OpenAI preset 的调用劫持到代理,触发 SSL handshake 失败(W13-C 撞过)。
+
+**How to apply**:
+- 新 provider 沿用 W14-B Ollama / W14-D Anthropic + OpenAICompat 模式,在 `_ensure_client` 末尾加 `http_client=httpx.Client(trust_env=False)`
+- 测试加 3 条:trust_env 透传 + 不受 proxy env vars 影响 + 构造幂等
+- 不引入 env opt-in(opt-out `trust_env=False` 风险高,公司 VPN 用户几乎全数踩坑)
+
+**Ref**: `src/media_to_doc/llm/{ollama,anthropic,openai_compat}.py`,`tests/test_llm/{test_ollama,test_anthropic,test_openai_compat}.py`
