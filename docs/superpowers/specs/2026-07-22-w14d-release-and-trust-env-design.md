@@ -9,7 +9,7 @@
 
 ## 0. 目标(用户拍板)
 
-W14-C 的下一步候选里,用户选择 **C+E 组合**(~1.5h):
+W14-C 的下一步候选里,用户选择 **C+E 组合**(~65min 主流程 + 1h 缓冲):
 
 - **C 推子仓 v1.3.0 GitHub Release** — push `kizemo/media-to-doc-ui` 仓到 GitHub + gh release v1.3.0 + 2 assets(NSIS installer + Tauri portable)
 - **E 全 provider trust_env=False** — 仿 W14-B OllamaProvider 模式,补全 AnthropicProvider + OpenAICompatProvider 透传 `trust_env=False`,防止公司 VPN 父 shell 劫持到代理并触发 SSL 失败
@@ -126,10 +126,13 @@ def _ensure_client(self) -> object:
     if not self._api_key:
         raise RuntimeError(...)
     try:
-        from anthropic import Anthropic
+        from anthropic import Anthropic  # type: ignore[import-untyped]
         import httpx
     except ImportError as exc:
-        raise ImportError(...)
+        raise ImportError(
+            "AnthropicProvider 需要 anthropic SDK + httpx。安装方式:"
+            "uv add 'media_to_doc[llm]' 或 uv add 'anthropic httpx'"
+        ) from exc
     kwargs: dict[str, object] = {
         "api_key": self._api_key,
         "http_client": httpx.Client(trust_env=False),  # W14-D 新增
@@ -156,10 +159,13 @@ def _ensure_client(self) -> object:
     if not self._base_url:
         raise RuntimeError(...)
     try:
-        from openai import OpenAI
+        from openai import OpenAI  # type: ignore[import-untyped]
         import httpx
     except ImportError as exc:
-        raise ImportError(...)
+        raise ImportError(
+            "OpenAICompatProvider 需要 openai SDK + httpx。安装方式:"
+            "uv add 'media_to_doc[llm]' 或 uv add 'openai httpx'"
+        ) from exc
     self._client = OpenAI(
         api_key=self._api_key,
         base_url=self._base_url,
@@ -252,10 +258,10 @@ session <2h 预算内有 1h 缓冲(撞墙 / 复测 / 修 bug)。
 | `F:/soft/00selfmade/media-to-doc-ui/target/release/bundle/nsis/media-to-doc-1.3.0-setup.exe` | NSIS installer 输出 | **新生成** |
 | `F:/soft/00selfmade/media-to-doc-ui/target/release/bundle/media-to-doc-1.3.0-portable.exe` | portable 副本 | **新建**(cp) |
 | `F:/soft/00selfmade/media-to-doc-ui/.git/config` | git remote | **+remote**(SSH `git@github.com:kizemo/media-to-doc-ui.git`) |
-| `F:/soft/00selfmade/media-to-doc-ui/src/media_to_doc/llm/anthropic.py` | E provider 1 | **改 `_ensure_client`** |
-| `F:/soft/00selfmade/media-to-doc/src/media_to_doc/llm/openai_compat.py` | E provider 2 | **改 `_ensure_client`** |
-| `F:/soft/00selfmade/media-to-doc/tests/test_llm/test_anthropic.py` | E 测试 1 | **+3 用例** |
-| `F:/soft/00selfmade/media-to-doc/tests/test_llm/test_openai_compat.py` | E 测试 2 | **+3 用例** |
+| `F:/soft/00selfmade/media-to-doc/src/media_to_doc/llm/anthropic.py` | E provider 1(主仓) | **改 `_ensure_client`** |
+| `F:/soft/00selfmade/media-to-doc/src/media_to_doc/llm/openai_compat.py` | E provider 2(主仓) | **改 `_ensure_client`** |
+| `F:/soft/00selfmade/media-to-doc/tests/test_llm/test_anthropic.py` | E 测试 1(主仓) | **+3 用例** |
+| `F:/soft/00selfmade/media-to-doc/tests/test_llm/test_openai_compat.py` | E 测试 2(主仓) | **+3 用例** |
 | `F:/soft/00selfmade/media-to-doc/docs/RELEASE_NOTES_v1.3.0.md` | 主仓 release notes(记录 subrepo 发布) | **新建** |
 | `F:/soft/00selfmade/media-to-doc/handoff-w14d-*.md` | 本会话 handoff | **写** |
 | `F:/soft/00selfmade/media-to-doc/task.md` | 活跃 todo | **+W14-D 节** |
