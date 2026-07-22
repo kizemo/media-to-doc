@@ -276,6 +276,22 @@
   - 单实例锁 `tauri-plugin-single-instance`
   - 真实 11 stage pipeline 端到端验证
 
+- [x] **W14-D C+E Tauri UI Release + 全 provider trust_env**(2026-07-22,~65min)
+  - C: 子仓 push + NSIS 实编译 + gh release v1.3.0 + 2 assets(setup.exe 1.5MB + portable.exe 6.2MB)
+    - 子仓 SSH remote + `git push -u origin master` + `git push origin tag v1.3.0`
+    - NSIS 3.12 + `installer.nsi` 实编译,补 W14-C B 跳过步骤
+    - LICENSE.txt 复制到 nsis/ 给 MUI_PAGE_LICENSE
+    - `gh release create v1.3.0 --target master --notes-file`
+  - E: Anthropic + OpenAICompat `_ensure_client` 透传 `http_client=httpx.Client(trust_env=False)`
+    - 沿用 W14-B Ollama 模式(commit `427d963`)
+    - 6 个新测试(2 provider × 3 用例:透传 / proxy 不影响 / 幂等)
+    - 测试:598 → 604 passed / 0 skipped;ruff:All checks passed
+  - 主仓:1 fix commit + 1 docs commit,fix 自动 merge main(per §5.6 pre-authorize)
+  - LE:LP-20260722-W14D-001 沉淀 defense in depth
+  - commit:`fix(llm): W14-D — extend trust_env=False to Anthropic + OpenAICompat providers`
+  - commit:`docs(release): W14-D — subrepo v1.3.0 NSIS installer build + GitHub Release`
+  - handoff:`handoff-w14d-c-e-2026-07-22.md`
+
 ---
 
 ## Phase 7 — 文档与示例(L2)
