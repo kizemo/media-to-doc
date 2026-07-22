@@ -374,19 +374,21 @@ print(f"total_runs={runs['total_runs']}, llm_health={runs['llm_health_global']}"
 | v1.2.0 | LLM-driven chapter fusion(W12-D 硬切 → LLM 内容融合) | ✅ W12-E |
 | v1.2.1 | longdoc W12-D 3 级 fallback + fusion proxy 隔离(W13-A 撞出的 2 个 P1 bug) | ✅ W14-A |
 | v1.2.2 (planned) | OllamaProvider `trust_env=False` 代码层消除 HTTP_PROXY 污染 | ✅ W14-B (`427d963`) |
-| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 | 🔄 W14-B 骨架完成(`media-to-doc-ui` 独立 repo,`cargo tauri dev` 待跑) |
-| **v1.4 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始 |
+| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 | ✅ W14-B+ 8/8 commands(分支 `feat/w14b-plus-8-commands`,6 commit,30 unit test / 0 failed) |
+| **v1.4 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始(W14-B+2 完整 UI + log tail 后续) |
 | **L3 — 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
 
 ### Tauri UI 子项目(独立 repo)
 
-W14-B 启动:`F:/soft/00selfmade/media-to-doc-ui/`(独立 git repo,不入主仓)。
+W14-B 启动 + W14-B+ 8 commands 全实装:`F:/soft/00selfmade/media-to-doc-ui/`(独立 git repo,不入主仓)。
 
 - Rust toolchain:`winget install Rustlang.Rustup` → rustc 1.97.1 / cargo 1.97.1
 - Tauri CLI:`~/.cargo/bin/tauri.exe` = 2.11.4(GitHub release 直接下 zip + 解压)
-- Cargo mirror:`~/.cargo/config.toml`:rsproxy.cn sparse + git-fetch-with-cli
-- 首次 `cargo tauri dev` 未跑:VPN HTTPS MITM 撞 Cargo sparse SSL,需换网络或 vendor
-- 详见 `ARCHITECTURE.md` 在子项目根 + `handoff-pipeline-w14b-tauri-bootstrap-2026-07-22.md`
+- Cargo SSL 撞墙破解(W14-B+ T1):`default crates-io` + `CARGO_NET_TLS_VERIFY=false` env var(handoff 文档错的"verify off 不 work"实际是 sparse 不 work,default work)
+- 8 commands 全部实装(W14-B+ T2+T3+T4+T6):list_courses / check_status / list_outputs / read_lecture / run_pipeline / resume_pipeline / cancel_run / list_running / get_run_metrics / list_runs(probe 也走 Tauri command)
+- 简版 5 tab SPA 前端(W14-B+ T5 部分):Inbox / Run / Output / Health / Learn,真实 mtd.log tail 留 W14-B+2
+- 环境变量:`MEDIA_TO_DOC_PROJECT` / `UV_BIN` / `MEDIA_TO_DOC_WORKSPACE`
+- 详见 `ARCHITECTURE.md` 在子项目根 + `handoff-pipeline-w14b-plus-tauri-8cmds-2026-07-22.md`
 
 ### v1.x 发布流程(已建立)
 
