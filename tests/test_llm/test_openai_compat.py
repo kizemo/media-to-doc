@@ -386,3 +386,123 @@ def test_register_provider_extends_registry() -> None:
     assert provider.chat("hi").text == "custom reply"
   finally:
     PROVIDERS.pop("custom", None)
+
+
+# ─────────────────────────────────────────────────────────────
+# W14-D:HTTP_PROXY pollution 防护 — trust_env=False 透传到 httpx
+# ─────────────────────────────────────────────────────────────
+
+# 8 个 proxy env vars(W13-C 已固化为 baseline,详见 feedback memory
+# ``feedback_proxy_env_pollution.md``)
+PROXY_ENV_VARS = (
+  "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+  "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy",
+)
+
+
+def test_ensure_client_passes_trust_env_false_to_openai_sdk(monkeypatch) -> None:
+  """W14-D:_ensure_client 构造 OpenAI 客户端时必须透传
+  http_client=httpx.Client(trust_env=False)。
+
+  与 W14-B Ollama 同模式(commit 427d963),防止公司 VPN 父 shell 设的
+  HTTP_PROXY/HTTPS_PROXY/all_proxy 把 7 个 preset(minimax/deepseek/zhipu/
+  moonshot/openrouter/dashscope/hunyuan)调用劫持到代理。openai SDK ≥ 1.40
+  接受 ``http_client`` 参数,我们透传一个 ``trust_env=False`` 的 httpx.Client。
+  """
+  import sys
+  import types
+
+  import httpx
+
+  captured: dict[str, object] = {}
+
+  class _CaptureClient:
+    def __init__(self, **kwargs: object) -> None:
+      captured.update(kwargs)
+      self.chat = _FakeChatNamespace(_FakeOpenAIClient())
+      self.models = _FakeModelsNamespace(_FakeOpenAIClient())
+
+  fake_openai = types.ModuleType("openai")
+  fake_openai.OpenAI = _CaptureClient  # type: ignore[attr-defined]
+  monkeypatch.setitem(sys.modules, "openai", fake_openai)
+
+  p = OpenAICompatProvider(
+    api_key="sk-x",
+    preset="minimax",
+    model="preset-model",
+  )
+  p._client = None
+  client = p._ensure_client()
+
+  assert isinstance(client, _CaptureClient)
+  assert "http_client" in captured, (
+    "OpenAICompatProvider._ensure_client 必须给 OpenAI 传 http_client 参数,"
+    " 否则 SDK 内部 httpx 会读 HTTP_PROXY 等 env vars"
+  )
+  http_client = captured["http_client"]
+  assert isinstance(http_client, httpx.Client)
+  assert http_client.trust_env is False, (
+    "OpenAICompat 透传的 http_client 必须 trust_env=False"
+  )
+
+
+def test_ensure_client_unaffected_by_proxy_env_vars(monkeypatch) -> None:
+  """W14-D:即使父 shell 设有 proxy vars,_ensure_client 仍能正常构造 client。"""
+  import sys
+  import types
+
+  for var in PROXY_ENV_VARS:
+    monkeypatch.setenv(var, "http://127.0.0.1:49223")
+
+  captured: dict[str, object] = {}
+
+  class _CaptureClient:
+    def __init__(self, **kwargs: object) -> None:
+      captured.update(kwargs)
+      self.chat = _FakeChatNamespace(_FakeOpenAIClient())
+      self.models = _FakeModelsNamespace(_FakeOpenAIClient())
+
+  fake_openai = types.ModuleType("openai")
+  fake_openai.OpenAI = _CaptureClient  # type: ignore[attr-defined]
+  monkeypatch.setitem(sys.modules, "openai", fake_openai)
+
+  p = OpenAICompatProvider(
+    api_key="sk-x",
+    preset="minimax",
+    model="preset-model",
+  )
+  p._client = None
+  client = p._ensure_client()
+  assert isinstance(client, _CaptureClient)
+  assert "http_client" in captured
+  assert captured["http_client"].trust_env is False
+
+
+def test_ensure_client_idempotent_after_first_init(monkeypatch) -> None:
+  """_ensure_client 第一次构造后,后续调用复用 self._client,不再传 kwargs。"""
+  import sys
+  import types
+
+  call_count = {"n": 0}
+
+  class _CountingClient:
+    def __init__(self, **kwargs: object) -> None:
+      call_count["n"] += 1
+      self.kwargs = dict(kwargs)
+      self.chat = _FakeChatNamespace(_FakeOpenAIClient())
+      self.models = _FakeModelsNamespace(_FakeOpenAIClient())
+
+  fake_openai = types.ModuleType("openai")
+  fake_openai.OpenAI = _CountingClient  # type: ignore[attr-defined]
+  monkeypatch.setitem(sys.modules, "openai", fake_openai)
+
+  p = OpenAICompatProvider(
+    api_key="sk-x",
+    preset="minimax",
+    model="preset-model",
+  )
+  p._client = None
+  client1 = p._ensure_client()
+  client2 = p._ensure_client()
+  assert client1 is client2
+  assert call_count["n"] == 1

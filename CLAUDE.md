@@ -223,6 +223,21 @@ test(<scope>): <description>
 - Bash 调用 >100 → 拆任务或新开会话
 - 撞墙征兆出现 → 立即写 `handoff-<topic>-<date>.md`,再决定是否继续
 
+### 5.6 Session-level pre-authorize
+
+本会话及后续会话的自动合并/审核规则(W14-C 用户确认,2026-07-22):
+
+| 触发条件 | 行为 |
+|---|---|
+| commit 含 `fix:` + 测试通过 + reviewer 通过 | **自动 merge master**,无需 ask |
+| commit 含 `feat:` + 测试通过 + reviewer 通过 | **写 handoff,等用户拍板**,不自动 merge |
+| commit 含 `wip` / `draft` | **永不 merge**,只写 handoff |
+| 修改 `commands.rs` / `runner.rs`(Rust) | **必须 review 2 轮**(本会话 + 上一会话 reviewer),不能单轮 |
+| 修改 `index.html`(frontend) | **单轮 review OK** |
+
+**为什么这样设计**:fix 类改动风险低,自动合入减少排队;feat 类需用户确认方向;
+Rust 后端改影响面大,双轮 review 防回归。
+
 ---
 
 ## 6. 文档维护
@@ -361,18 +376,43 @@ print(f"total_runs={runs['total_runs']}, llm_health={runs['llm_health_global']}"
 
 ## 10. 后续规划
 
-> v1.0.0 已 GA 发布到 PyPI(W12-A 完成,2026-07-20)。下表为 v1.0+ 后续工作。
+> 当前最新发布:**v1.2.1**(2026-07-21,W14-A)—
+> [PyPI](https://pypi.org/project/media-to-doc/) +
+> [GitHub Release](https://github.com/kizemo/media-to-doc/releases/tag/v1.2.1)。
+> 598 pytest / 0 跳过。下表为 v1.0+ 已发布与待开始项。
 
-| 阶段 | 内容 | 状态 |
+| 版本 | 内容 | 状态 |
 |---|---|---|
-| ~~启动 / L0-L2 (W0-W11)~~ | 全部 ✅ | 已完成 |
-| **PyPI 上线** | `uv pip install media_to_doc` | ✅ W12-A |
-| **GitHub release 真实发布** | push + `gh release create v1.0.0` | 待用户配 git remote |
-| **v1.0.1 patch** | 修 W11-C §4 标记的 2 个 HTML 渲染降级(mermaid 流程图 / GFM task list) | 待开始 |
-| **v1.1 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 | 待开始(Phase 2) |
-| **v1.2 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始(Phase 3) |
-| **L3 - 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
-| **PyPI 维护** | v1.x 后续 patch / minor release 流程 | 维护期 |
+| v1.0.0 | First stable release — 11 stage 流水线 + LE 闭环 + 3 种调用方式 | ✅ W11-B + W12-A + W12-B |
+| v1.0.1 | mermaid 流程图 + GFM task list HTML 渲染降级修复 | ✅ W12-C |
+| v1.1.0 | multi-video layout(`output_final/` 分离 + 真视频名 + `merge_lectures`) | ✅ W12-D |
+| v1.2.0 | LLM-driven chapter fusion(W12-D 硬切 → LLM 内容融合) | ✅ W12-E |
+| v1.2.1 | longdoc W12-D 3 级 fallback + fusion proxy 隔离(W13-A 撞出的 2 个 P1 bug) | ✅ W14-A |
+| v1.2.2 (planned) | OllamaProvider `trust_env=False` 代码层消除 HTTP_PROXY 污染 | ✅ W14-B (`427d963`) |
+| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 + log tail + modal | ✅ W14-B+ + W14-B+2(分支 `feat/w14b-plus-8-commands`,8 commit,39 unit test / 0 failed) |
+| **v1.4 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始(W14-B+2 完整 UI + log tail 后续) |
+| **L3 — 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
+
+### Tauri UI 子项目(独立 repo)
+
+W14-B 启动 + W14-B+ 8 commands 全实装:`F:/soft/00selfmade/media-to-doc-ui/`(独立 git repo,不入主仓)。
+
+- Rust toolchain:`winget install Rustlang.Rustup` → rustc 1.97.1 / cargo 1.97.1
+- Tauri CLI:`~/.cargo/bin/tauri.exe` = 2.11.4(GitHub release 直接下 zip + 解压)
+- Cargo SSL 撞墙破解(W14-B+ T1):`default crates-io` + `CARGO_NET_TLS_VERIFY=false` env var(handoff 文档错的"verify off 不 work"实际是 sparse 不 work,default work)
+- 8 commands 全部实装(W14-B+ T2+T3+T4+T6):list_courses / check_status / list_outputs / read_lecture / run_pipeline / resume_pipeline / cancel_run / list_running / get_run_metrics / list_runs(probe 也走 Tauri command)
+- 简版 5 tab SPA 前端(W14-B+ T5 部分):Inbox / Run / Output / Health / Learn,真实 mtd.log tail 留 W14-B+2
+- 环境变量:`MEDIA_TO_DOC_PROJECT` / `UV_BIN` / `MEDIA_TO_DOC_WORKSPACE`
+- 详见 `ARCHITECTURE.md` 在子项目根 + `handoff-pipeline-w14b-plus-tauri-8cmds-2026-07-22.md`
+
+**W14-B+2 收尾**(2026-07-22,~3h):
+- 后端 `read_log` Tauri command(offset 模式 + 5 单测)
+- `read_lecture` 改 W12-D output_final 优先 + W3-W11 legacy fallback(+ 4 单测)
+- 前端 marked@12.0.0 CDN(SRI 锁版本)+ iframe srcdoc modal
+- 前端 log tail 2s 轮询 + offset diff
+- Output tab 文件 [read] 按钮
+- 39 unit test / 0 failed(baseline 30 + 9 new)
+- 详见 `handoff-pipeline-w14b-plus-2-ui-features-2026-07-22.md`
 
 ### v1.x 发布流程(已建立)
 

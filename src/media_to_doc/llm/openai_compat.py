@@ -30,6 +30,14 @@ provider = get_provider(
 - ``openai>=1.40.0`` Python SDK(lazy import)
 
 参考:TDD §4.2.4 + PROJECT_DESCRIPTION.md §3.3 openai_compatible 行。
+
+注意(W14-D):``_ensure_client`` 构造 ``OpenAI`` 时透传
+``http_client=httpx.Client(trust_env=False)``,让 SDK 内部 httpx 不读
+``HTTP_PROXY`` / ``HTTPS_PROXY`` / ``all_proxy`` 等环境变量,避免
+公司 VPN 父 shell 把 7 个 preset(minimax / deepseek / zhipu / moonshot /
+openrouter / dashscope / hunyuan)调用劫持到代理。沿用 ``OllamaProvider``
+W14-B ``427d963`` 模式。详见 feedback memory
+``feedback_proxy_env_pollution.md``。
 """
 
 from __future__ import annotations
@@ -220,7 +228,15 @@ class OpenAICompatProvider(BaseLLMProvider):
   # ── 内部 ────────────────────────────────────────────────
 
   def _ensure_client(self) -> object:
-    """lazy init OpenAI 客户端。"""
+    """lazy init OpenAI 客户端,透传 trust_env=False(W14-D 防 VPN 污染)。
+
+    透传 ``http_client=httpx.Client(trust_env=False)`` 给 SDK,这样
+    SDK 内部 httpx 不会读 ``HTTP_PROXY`` 等环境变量,避免公司 VPN 父
+    shell 把 7 个 preset(minimax / deepseek / zhipu / moonshot /
+    openrouter / dashscope / hunyuan)调用劫持到代理。沿用
+    ``OllamaProvider`` W14-B ``427d963`` 模式。详见 feedback memory
+    ``feedback_proxy_env_pollution.md``。
+    """
     if self._client is not None:
       return self._client
     if not self._api_key:
@@ -234,13 +250,18 @@ class OpenAICompatProvider(BaseLLMProvider):
         "或 preset= 传入"
       )
     try:
+      import httpx
       from openai import OpenAI  # type: ignore[import-untyped]
     except ImportError as exc:
       raise ImportError(
-        "OpenAICompatProvider 需要 openai SDK。安装方式:"
-        "uv add 'media_to_doc[llm]' 或 uv add openai"
+        "OpenAICompatProvider 需要 openai SDK + httpx。安装方式:"
+        "uv add 'media_to_doc[llm]' 或 uv add 'openai httpx'"
       ) from exc
-    self._client = OpenAI(api_key=self._api_key, base_url=self._base_url)
+    self._client = OpenAI(
+      api_key=self._api_key,
+      base_url=self._base_url,
+      http_client=httpx.Client(trust_env=False),  # W14-D 新增
+    )
     return self._client
 
 

@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 
 from media_to_doc.llm import ollama as ollama_mod
@@ -225,3 +228,97 @@ def test_ensure_client_raises_clear_error_when_sdk_missing(monkeypatch) -> None:
 
   with pytest.raises(ImportError, match="ollama Python SDK"):
     p._ensure_client()
+
+
+# ─────────────────────────────────────────────────────────────
+# W14-B:HTTP_PROXY pollution 防护 — trust_env=False 透传到 httpx
+# ─────────────────────────────────────────────────────────────
+
+# 8 个 proxy env vars(W13-C 已固化为 baseline,详见 feedback memory
+# ``feedback_proxy_env_pollution.md``)
+PROXY_ENV_VARS = (
+  "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
+  "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy",
+)
+
+
+def test_ensure_client_passes_trust_env_false_to_ollama_sdk(monkeypatch) -> None:
+  """W14-B:_ensure_client 构造 ollama.Client 时必须透传 trust_env=False。
+
+  这是代码层修复(配合 W13-C 脚本侧过滤),防止公司 VPN 父 shell 设的
+  HTTP_PROXY/HTTPS_PROXY/all_proxy 把 localhost:11434 调用劫持到代理
+  并触发 SSL handshake 失败。
+  """
+  captured: dict[str, object] = {}
+
+  class _CapturingClient:
+    def __init__(self, host: str | None = None, **kwargs: object) -> None:
+      captured["host"] = host
+      captured["kwargs"] = dict(kwargs)
+
+  fake_ollama = types.SimpleNamespace(Client=_CapturingClient)
+  monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
+
+  p = OllamaProvider(model="x", base_url="http://captured:11434")
+  p._client = None
+  client = p._ensure_client()
+
+  assert isinstance(client, _CapturingClient)
+  assert captured["host"] == "http://captured:11434"
+  assert captured["kwargs"].get("trust_env") is False, (
+    "OllamaProvider._ensure_client 必须给 ollama.Client 传 trust_env=False,"
+    " 否则内部 httpx 会读 HTTP_PROXY 等 env vars 把 localhost 调走代理"
+  )
+
+
+def test_ensure_client_unaffected_by_proxy_env_vars(monkeypatch) -> None:
+  """W14-B:即使父 shell 设有 proxy vars,_ensure_client 仍能正常构造 client。
+
+  验证 trust_env=False 真的让 httpx 忽略 HTTP_PROXY 等 — 因为我们用的是
+  capture client,真正起决定作用的是 trust_env=False 已被传入(o上一个测试已
+  单独验证);这里再补一层集成:即使 env 被设满 proxy vars,构造路径不抛错。
+  """
+  for var in PROXY_ENV_VARS:
+    monkeypatch.setenv(var, "http://127.0.0.1:49223")
+
+  captured: dict[str, object] = {}
+
+  class _CapturingClient:
+    def __init__(self, host: str | None = None, **kwargs: object) -> None:
+      captured["host"] = host
+      captured["kwargs"] = dict(kwargs)
+
+  fake_ollama = types.SimpleNamespace(Client=_CapturingClient)
+  monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
+
+  p = OllamaProvider(model="x")
+  p._client = None
+  # 不抛 SSL / proxy error 即视为通过(设 proxy vars 时 httpx 不读,就不走代理)
+  client = p._ensure_client()
+  assert isinstance(client, _CapturingClient)
+  assert captured["kwargs"].get("trust_env") is False
+
+
+def test_ensure_client_idempotent_after_first_init(monkeypatch) -> None:
+  """_ensure_client 第一次构造后,后续调用复用 self._client,不再传 kwargs。
+
+  回归保护:若有人把 trust_env=False 漏写到 _ensure_client 之外的地方,
+  这条测试还能确保客户端只构造一次(不会重复传 kwargs)。
+  """
+  call_count = {"n": 0}
+
+  class _CountingClient:
+    def __init__(self, host: str | None = None, **kwargs: object) -> None:
+      call_count["n"] += 1
+      self.host = host
+      self.kwargs = dict(kwargs)
+
+  fake_ollama = types.SimpleNamespace(Client=_CountingClient)
+  monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
+
+  p = OllamaProvider(model="x")
+  p._client = None
+  client1 = p._ensure_client()
+  client2 = p._ensure_client()
+  assert client1 is client2
+  assert call_count["n"] == 1

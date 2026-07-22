@@ -207,6 +207,75 @@
   - 兼容性:**默认新规 + 旧产物只读兼容**(gatekeeper / verify 优先 `output_final/` 回退 `output/chapters/raw/`)
   - v1.1.0 minor release(breaking layout + 新 feature)
 
+- [x] **W13-A 真跑 01.mp4 端到端 + LLM fusion 验证**(2026-07-21,~5h+)
+  - 起点:承接 W12-F,用户第一轮反馈"01.mp4 没处理过"
+  - 视频:`E:\resource\2026-01-27_年度复训\01_先精准后放大的打爆策略 .mp4`(506MB / ~111min)
+  - 备份:`output/` + `output_final/` → `output-backup-2026-07-21/` + `output_final-backup-2026-07-21/`
+  - 隔离:NTFS hardlink `_w13a_inbox\01_先精准后放大的打爆策略 .mp4`
+  - pipeline:asr(2.5GB CPU fp16)→ frames → ocr → asr_correct → chapters(LLM ollama) → draft → imagegen(skip) → render → longdoc(active ollama) → verify
+  - env 三件套:unset proxy + HF_ENDPOINT=hf-mirror.com + HF_HUB_DISABLE_XET=1
+  - 04:01 pipeline 启动,音频抽 5.9s 完成;14:08 ASR 转 82 段/302s(估计 5h+)
+  - 90min mark:2026-07-21T15:31 → 检查 ASR 进度,卡 50%+ 即 taskkill 接受 85% transcript
+  - 验收点:
+    - [x] chapters.json video 字段 = "01_先精准后放大的打爆策略"(非 "output",W12-D derive_video_name 验证)
+    - [x] output_final/01_先精准后放大的打爆策略_{cleaned.md, final.html} 存在
+    - [x] verify + gatekeeper 一致 PASS
+    - [x] pipeline_run.json llm_health 含 chapters_ollama + draft_ollama + longdoc_ollama
+  - fusion 验证(W12-E LLM fusion):合并 01+03 → `_w13a_fusion/年度复训综合_cleaned.md`,验证:
+    - [x] 7+ 全局章节(LLM fusion 7 H2,fallback 10 H2)
+    - [x] include 字段含 all / summary / first_n:N 至少 2 种(LLM fusion 成功后产物结构化,include 类型由 LLM 决定)
+  - cleanup:`rm -rf _w13a_inbox _w13a_fusion` ✅ 已删
+  - commit + handoff:`handoff-pipeline-w13-01-fusion-2026-07-21.md` + `handoff-pipeline-w13-02-longdoc-fix-2026-07-21.md`
+- [x] **W13-B longdoc W12-D 兼容性修复**(2026-07-21,~30min,接 W13-A handoff §8)
+  - **P1 bug**:`longdoc.py:610-624` 期望 `<work>/chapters/raw/<video>.md` 单文件,W12-D 后该路径不存在(只在 final_dir/ 里)
+  - **修复**:新增 `_resolve_source_md(work, video, final_dir)` helper,3 级 fallback:
+    1. `<final_dir>/<video>.md`(W12-D 真相位置)
+    2. `<work>/chapters/raw/<video>.md`(W3-W11 旧布局)
+    3. `<work>/chapters/raw/<video>/chapter_*.md` 拼装(W12-D 中间产物应急)
+  - **测试**:13 用例覆盖 3 路径 + 全失败抛错 + 端到端集成(595 → 595 passed,+13 new)
+  - **真跑验证**:`scripts/_w13b_verify_longdoc_fix.py` 在 _w13a_inbox 真产物上跑 → source 自动选 W12-D 真讲义(+1.4% chars,含 TOC/摘要/要点/关键帧)
+  - **commit**:`fix(pipeline): W13-B — longdoc W12-D 兼容 3 级 fallback`
+- [x] **W13-C W12-E fusion SSL 诊断 + 修复**(2026-07-21,~10min)
+  - **根因**:父 shell 有 `HTTP_PROXY=http://127.0.0.1:49223` 等公司 VPN 代理变量;`_w13a_run_fusion.py` 子进程 `env=` 替换时未剔除 proxy vars,导致 ollama SDK 的 httpx 走代理后报 SSL unknown error
+  - **修复**:fusion 脚本子进程 env 显式过滤 8 个 proxy vars(`HTTP_PROXY` / `HTTPS_PROXY` / `http_proxy` / `https_proxy` / `ALL_PROXY` / `all_proxy` / `NO_PROXY` / `no_proxy`)
+  - **验证**:重跑 fusion → 7 H2 章节 LLM 融合产物(此前 10 H2 是 fallback 硬切)
+  - **诊断脚本**:`scripts/_w13c_diag_fusion_ssl.py`(可复用,验证 ollama 健康 + prompt 大小边界)
+  - **commit**:`fix(scripts): W13-C — filter proxy vars from fusion subprocess env`
+
+- [x] **W14-A v1.2.1 patch 发布**(2026-07-21,~30min)
+  - 合并:`fix/pipeline-w13-longdoc-w12d-compat`(3 commit) → `release/v1.0`(`--no-ff`)
+  - bump:pyproject 1.2.0 → 1.2.1 + uv.lock 同步 + test_smoke.py 版本断言 + 3 个 scripts ruff F401 修
+  - 文档:CHANGELOG 加 `[1.2.1]` 节 + `docs/RELEASE_NOTES_v1.2.1.md`(gh release form)
+  - PyPI:`media_to_doc-1.2.1-py3-none-any.whl`(136KB)+ `media_to_doc-1.2.1.tar.gz`(591KB)
+    - keyring + `UV_PUBLISH_TOKEN` env var 流程(W12-A 验证)
+    - PyPI JSON API 验证:`latest=1.2.1`,5 个 v1.x release 全在(`1.0.0/1.0.1/1.1.0/1.2.0/1.2.1`)
+  - GitHub Release:`https://github.com/kizemo/media-to-doc/releases/tag/v1.2.1`
+    - 2 assets 上传(wheel + sdist)+ SHA256 verified
+  - 测试:595 passed / 0 skipped,ruff clean
+  - tag:annotated `v1.2.1`(已 push 到 origin)
+  - commit:`docs(release): W14-A — v1.2.1 patch (longdoc W12-D 3 级 fallback + fusion proxy fix)`(`8da9e7b`)
+  - handoff:`handoff-pipeline-w13-02-longdoc-fix-2026-07-21.md`(fix 分支已写,合并后 release/v1.0 也有)
+- [x] **W14-B OllamaProvider trust_env + Tauri UI 启动**(2026-07-22,~80min)
+  - A. 代码层修 HTTP_PROXY pollution:`OllamaProvider._ensure_client` 透传 `trust_env=False` 给内部 httpx,localhost 调用不再被公司 VPN 父 shell 劫持到代理
+    - `tests/test_llm/test_ollama.py`:+3 用例(透传验证 / proxy env 不影响 / 构造幂等)
+    - 测试:**595 → 598 passed** / 0 skipped / ruff clean
+    - commit:`427d963 fix(llm): W14-B — OllamaProvider._ensure_client 透传 trust_env=False`(release/v1.0)
+  - B. Tauri UI 骨架(独立子项目 `F:/soft/00selfmade/media-to-doc-ui/`):
+    - 工具链:`winget install Rustlang.Rustup`(rustc 1.97.1,自带 lld-link 无需 MSVC)
+    - `cargo-tauri-x86_64-pc-windows-msvc.zip` 从 GitHub release 下到 `~/.cargo/bin/tauri.exe`(`cargo install` 撞 VPN HTTPS MITM 拦)
+    - Cargo mirror:`~/.cargo/config.toml` 用 rsproxy.cn sparse
+    - 项目骨架 12 文件:`src-tauri/{Cargo.toml, build.rs, tauri.conf.json, main.rs, lib.rs, capabilities/default.json, icons/icon.png}` + `src/index.html` + `README.md` + `ARCHITECTURE.md`(10 节设计)+ `.gitignore`
+    - 当前 2 个 demo commands:`app_info` / `ping`(W14-B+ 接着实装 8 个对齐 MCP 工具)
+    - **首次 `cargo tauri dev` 未跑**:Tauri 数百个 crate 拉不下来,撞 sparse SSL;留给下次会话换网络 / vendor dependencies 后跑
+    - commit:`839a95f feat(ui): W14-B — Tauri 2 desktop shell 启动骨架 (media-to-doc-ui)`(独立 repo,local only)
+    - handoff:`handoff-pipeline-w14b-tauri-bootstrap-2026-07-22.md`
+- [ ] **W14-C Tauri UI 真跑 hello world + 实装 8 commands**(估 4-6h,需换网络或预 vendor Tauri 依赖)
+  - 首次 `cargo tauri dev` 跑通 hello world
+  - 实装 8 Tauri commands 对齐 MCP 8 工具(`list_courses` / `run_pipeline` / `check_status` / `list_outputs` / `read_lecture` / `get_run_metrics` / `list_runs` / `cancel_run`)
+  - 前端 UI 组件:ProgressBar / LogPanel / 多视频目录选择
+  - 单实例锁 `tauri-plugin-single-instance`
+  - 真实 11 stage pipeline 端到端验证
+
 ---
 
 ## Phase 7 — 文档与示例(L2)

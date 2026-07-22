@@ -8,6 +8,12 @@
 - ``ollama>=0.3.0`` Python SDK(lazy import,只装 ``media_to_doc[llm]`` extras 才可用)
 
 参考:TDD §4.2 + PROJECT_DESCRIPTION.md §3.3 ollama 行。
+
+注意(W14-B):``_ensure_client`` 构造 ``ollama.Client`` 时透传
+``trust_env=False`` 给内部 httpx,防止公司 VPN 父 shell 设的
+``HTTP_PROXY`` / ``HTTPS_PROXY`` / ``all_proxy`` 把 localhost 调用劫持到
+代理并触发 SSL handshake 失败。详见 feedback memory
+``feedback_proxy_env_pollution.md``。
 """
 
 from __future__ import annotations
@@ -129,7 +135,13 @@ class OllamaProvider(BaseLLMProvider):
   # ── 内部 ────────────────────────────────────────────────
 
   def _ensure_client(self) -> object:
-    """lazy init Ollama 客户端(失败抛清晰 ImportError)。"""
+    """lazy init Ollama 客户端(失败抛清晰 ImportError)。
+
+    透传 ``trust_env=False`` 给内部 httpx,这样 httpx 不会读
+    ``HTTP_PROXY`` / ``HTTPS_PROXY`` / ``all_proxy`` 等环境变量,避免
+    公司 VPN 父 shell 把 localhost:11434 调用劫持到代理。
+    详见 feedback memory ``feedback_proxy_env_pollution.md``。
+    """
     if self._client is not None:
       return self._client
     try:
@@ -139,7 +151,7 @@ class OllamaProvider(BaseLLMProvider):
         "OllamaProvider 需要 ollama Python SDK。安装方式:"
         "uv add 'media_to_doc[llm]' 或 uv add ollama"
       ) from exc
-    self._client = ollama.Client(host=self._base_url)
+    self._client = ollama.Client(host=self._base_url, trust_env=False)
     return self._client
 
 
