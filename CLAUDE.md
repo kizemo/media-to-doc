@@ -374,7 +374,7 @@ print(f"total_runs={runs['total_runs']}, llm_health={runs['llm_health_global']}"
 | v1.2.0 | LLM-driven chapter fusion(W12-D 硬切 → LLM 内容融合) | ✅ W12-E |
 | v1.2.1 | longdoc W12-D 3 级 fallback + fusion proxy 隔离(W13-A 撞出的 2 个 P1 bug) | ✅ W14-A |
 | v1.2.2 (planned) | OllamaProvider `trust_env=False` 代码层消除 HTTP_PROXY 污染 | ✅ W14-B (`427d963`) |
-| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 | ✅ W14-B+ 8/8 commands(分支 `feat/w14b-plus-8-commands`,6 commit,30 unit test / 0 failed) |
+| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 + log tail + modal | ✅ W14-B+ + W14-B+2(分支 `feat/w14b-plus-8-commands`,8 commit,39 unit test / 0 failed) |
 | **v1.4 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始(W14-B+2 完整 UI + log tail 后续) |
 | **L3 — 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
 
@@ -389,6 +389,15 @@ W14-B 启动 + W14-B+ 8 commands 全实装:`F:/soft/00selfmade/media-to-doc-ui/`
 - 简版 5 tab SPA 前端(W14-B+ T5 部分):Inbox / Run / Output / Health / Learn,真实 mtd.log tail 留 W14-B+2
 - 环境变量:`MEDIA_TO_DOC_PROJECT` / `UV_BIN` / `MEDIA_TO_DOC_WORKSPACE`
 - 详见 `ARCHITECTURE.md` 在子项目根 + `handoff-pipeline-w14b-plus-tauri-8cmds-2026-07-22.md`
+
+**W14-B+2 收尾**(2026-07-22,~3h):
+- 后端 `read_log` Tauri command(offset 模式 + 5 单测)
+- `read_lecture` 改 W12-D output_final 优先 + W3-W11 legacy fallback(+ 4 单测)
+- 前端 marked@12.0.0 CDN(SRI 锁版本)+ iframe srcdoc modal
+- 前端 log tail 2s 轮询 + offset diff
+- Output tab 文件 [read] 按钮
+- 39 unit test / 0 failed(baseline 30 + 9 new)
+- 详见 `handoff-pipeline-w14b-plus-2-ui-features-2026-07-22.md`
 
 ### v1.x 发布流程(已建立)
 
