@@ -9,7 +9,7 @@
 
 ## 亮点
 
-### 1. 8 个 Tauri commands 全部实装(W14-B+ 系列)
+### 1. 9 个 Tauri commands 全部实装(W14-B+ + W14-C A)
 
 | Command | 语义 | 与 MCP 8 工具对齐 |
 |---|---|---|
@@ -22,6 +22,8 @@
 | `read_lecture` | 读 md/html,优先 W12-D 布局 | ✅ |
 | `get_run_metrics` | LE L1 健康度查询 | ✅ |
 | `list_runs` | LE 跨 run 健康度 | ✅ |
+
+> 注:9 个 commands 中 8 个对齐 MCP 工具(`list_courses` / `run_pipeline` / `resume_pipeline` / `check_status` / `list_outputs` / `read_lecture` / `get_run_metrics` / `list_runs`);`cancel_run` 是 UI 端为多课程并发(W14-C A)新增的命令。
 
 ### 2. 多课程并发(W14-C A)
 
