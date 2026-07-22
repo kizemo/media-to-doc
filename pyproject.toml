@@ -1,6 +1,6 @@
 [project]
 name = "media_to_doc"
-version = "1.2.1"
+version = "1.3.0"
 description = "把本地音视频一键转化为带 AI 配图、可独立分发的 Markdown + HTML 讲义"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -120,7 +120,7 @@ mtd-mcp = "media_to_doc.mcp_server:main"
 "Bug Tracker" = "https://github.com/kizemo/media-to-doc/issues"
 "Documentation" = "https://github.com/kizemo/media-to-doc#readme"
 "Changelog" = "https://github.com/kizemo/media-to-doc/blob/main/CHANGELOG.md"
-"Release Notes" = "https://github.com/kizemo/media-to-doc/releases/tag/v1.0.0"
+"Release Notes" = "https://github.com/kizemo/media-to-doc/releases/tag/v1.3.0"
 "PyPI" = "https://pypi.org/project/media-to-doc/"
 
 # ─────────────────────────────────────────────────────────────

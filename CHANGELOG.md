@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.0] - 2026-07-22
+
+### 🛡️ Defense in depth: LLM provider trust_env 全栈隔离
+
+W13-C 撞出"公司 VPN 父 shell 代理劫持子进程 httpx"问题后,W14-B 修了 Ollama 一个 provider,
+W14-D E 把修复扩展到 **Anthropic + OpenAI-compatible 两个 provider**,实现三个 LLM provider
+全部显式 `httpx.Client(trust_env=False)`,从代码层消除 HTTP_PROXY 污染,与脚本层
+子进程 env 过滤形成 defense in depth。
+
+子项目 `media-to-doc-ui` 同步发布 **v1.3.0**(W14-C A+B + W14-D C+Tauri v1.3.0 GitHub Release):
+NSIS installer (`media-to-doc-1.3.0-setup.exe` ~1.5MB) + 便携版
+(`media-to-doc-1.3.0-portable.exe` ~6.2MB)。Tauri 桌面壳为 macOS / Linux / Windows
+用户提供 3-次点击跑通 11 stage 流水线的入口,8 commands 等价对齐 MCP 8 工具。
+
+### Added
+
+- **Tauri UI 子项目 v1.3.0** (W14-C + W14-D):独立 repo `kizemo/media-to-doc-ui`,
+  - Tauri 2.11.4 + Rust 1.97.1 + system NSIS 3.12
+  - 8 commands 等价对齐 MCP 8 工具(probe / list_courses / check_status / list_outputs / read_lecture / get_run_metrics / list_runs / read_log)
+  - 5 tab SPA(Inbox / Run / Output / Health / Learn)
+  - 多课程并发(max_concurrent=3 + LRU 100 + 2s cancel)
+  - `E2E verify` 脚本 `scripts/_w14d_e2e_verify.py`(主仓端到端验证子仓 8/8 commands)
+- **sandbox-verify 真机验证脚本** (W14-D):`F:\soft\00selfmade\sandbox-verify\media-to-doc-ui\`
+  (Tauri 桌面壳专用,纯 Python wheel 不走沙箱)
+
+### Fixed
+
+- **trust_env=False 全 provider** (`b283d64` / `427d963`):OllamaProvider / AnthropicProvider /
+  OpenAICompatProvider 三个 provider 的 `_ensure_client` 全部透传
+  `http_client=httpx.Client(trust_env=False)`,与脚本层 proxy vars 过滤形成
+  defense in depth(中国大陆 + 公司 VPN 用户必备)
+- **read_lecture html→md fallback** (`3ac1337`):返回 `source=fallback_md` 标识,便于
+  上层 UI 区分讲义来源(子仓 Tauri modal 用)
+- **read_lecture W12-D output_final 优先** (`90e9b7d`):4 个新单测覆盖
+  `output_final/<stem>.md` 优先 + W3-W11 旧布局 fallback
+- **read_log Tauri command** (`15ae251`):5 个新单测覆盖 offset-based 2s log tail
+- **release notes command count 8 → 9** (`951c9ed`):`cancel_run` 标为 UI-only
+  (无 Python API 等价,不在 8 commands 之列)
+
+### Changed
+
+- **CLAUDE.md §5.6 pre-authorize**(`8a916db`):会话级自动合并/审核规则,fix 自动
+  merge master / feat 写 handoff 等用户拍板 / Rust 后端双轮 review
+- **CLAUDE.md §11 真机装机验证**:`sandbox-verify` 强制时机(改 `tauri.conf.json` /
+  `installer.nsi` / `Cargo.toml` / `capabilities/` 后必跑)
+
+### Tested
+
+- **604 pytest 用例 / 0 跳过**(1.2.1 595 → 1.3.0 604,+9)
+  - 3 个 Ollama trust_env 透传(W14-B)
+  - 6 个 Anthropic + OpenAICompat trust_env 透传(W14-D E)
+- **ruff**:All checks passed
+- **W14-D E2E 端到端**:60s demo 视频 4m08s 跑通 + 8/8 Tauri commands 后端 API 验证
+- **子仓 v1.3.0 NSIS 真编译**:`installer.nsi` 实跑出 setup.exe + portable.exe,
+  `gh release create v1.3.0 --target master` 上传 2 assets,SHA256 verified
+
+[1.3.0]: https://github.com/kizemo/media-to-doc/releases/tag/v1.3.0
+[Tauri UI v1.3.0]: https://github.com/kizemo/media-to-doc-ui/releases/tag/v1.3.0
+
+---
+
 ## [1.0.0] - 2026-07-20
 
 ### 🎉 First stable release

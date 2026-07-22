@@ -46,7 +46,7 @@ def verify_list_courses() -> None:
     print(f"  courses={[c.name for c in courses]}")
     target = INBOX.name
     if target not in [c.name for c in courses]:
-        fail(f"30s_demo 不在 courses 中")
+        fail("30s_demo 不在 courses 中")
     ok(f"列出课程 {len(courses)} 个,含 {target}")
 
 
@@ -93,7 +93,7 @@ def verify_read_lecture() -> None:
     header("read_lecture (读 cleaned md)")
     md_path = FINAL / "30s_demo_cleaned.md"
     if not md_path.exists():
-        fail(f"cleaned md 不存在")
+        fail("cleaned md 不存在")
     content = md_path.read_text(encoding="utf-8")
     size = len(content)
     line_count = content.count("\n") + 1
@@ -155,13 +155,13 @@ def verify_read_log() -> None:
     if not log_path.exists():
         log_path = WORKSPACE / "workspace" / "work" / "mtd_console.log"
     if not log_path.exists():
-        print(f"  ⚠️  mtd.log 不存在,跳过")
+        print("  ⚠️  mtd.log 不存在,跳过")
         return
     size = log_path.stat().st_size
     lines = log_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     tail = "\n".join(lines[-5:])
     print(f"  size={size}B, lines={len(lines)}")
-    print(f"  tail(5 行):\n    " + tail.replace("\n", "\n    "))
+    print("  tail(5 行):\n    " + tail.replace("\n", "\n    "))
     ok(f"log 完整:{len(lines)} 行")
 
 
@@ -203,11 +203,11 @@ def main() -> None:
     print("\n" + "=" * 70)
     print("✅ Tauri UI 8 commands 后端 API 全部 OK,Tauri WebView 启动成功")
     print("=" * 70)
-    print(f"\n参考:")
-    print(f"  • Tauri 进程 PID=3188 (tasklist 验证)")
-    print(f"  • MainWindowHandle=918716 (webview 已创建)")
-    print(f"  • Frontend dev server http://localhost:1420/ (python http.server)")
-    print(f"  • 5 tab SPA 渲染:<media-to-doc-ui>/src/index.html")
+    print("\n参考:")
+    print("  • Tauri 进程 PID=3188 (tasklist 验证)")
+    print("  • MainWindowHandle=918716 (webview 已创建)")
+    print("  • Frontend dev server http://localhost:1420/ (python http.server)")
+    print("  • 5 tab SPA 渲染:<media-to-doc-ui>/src/index.html")
 
 
 if __name__ == "__main__":
