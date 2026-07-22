@@ -255,6 +255,26 @@
   - tag:annotated `v1.2.1`(已 push 到 origin)
   - commit:`docs(release): W14-A — v1.2.1 patch (longdoc W12-D 3 级 fallback + fusion proxy fix)`(`8da9e7b`)
   - handoff:`handoff-pipeline-w13-02-longdoc-fix-2026-07-21.md`(fix 分支已写,合并后 release/v1.0 也有)
+- [x] **W14-B OllamaProvider trust_env + Tauri UI 启动**(2026-07-22,~80min)
+  - A. 代码层修 HTTP_PROXY pollution:`OllamaProvider._ensure_client` 透传 `trust_env=False` 给内部 httpx,localhost 调用不再被公司 VPN 父 shell 劫持到代理
+    - `tests/test_llm/test_ollama.py`:+3 用例(透传验证 / proxy env 不影响 / 构造幂等)
+    - 测试:**595 → 598 passed** / 0 skipped / ruff clean
+    - commit:`427d963 fix(llm): W14-B — OllamaProvider._ensure_client 透传 trust_env=False`(release/v1.0)
+  - B. Tauri UI 骨架(独立子项目 `F:/soft/00selfmade/media-to-doc-ui/`):
+    - 工具链:`winget install Rustlang.Rustup`(rustc 1.97.1,自带 lld-link 无需 MSVC)
+    - `cargo-tauri-x86_64-pc-windows-msvc.zip` 从 GitHub release 下到 `~/.cargo/bin/tauri.exe`(`cargo install` 撞 VPN HTTPS MITM 拦)
+    - Cargo mirror:`~/.cargo/config.toml` 用 rsproxy.cn sparse
+    - 项目骨架 12 文件:`src-tauri/{Cargo.toml, build.rs, tauri.conf.json, main.rs, lib.rs, capabilities/default.json, icons/icon.png}` + `src/index.html` + `README.md` + `ARCHITECTURE.md`(10 节设计)+ `.gitignore`
+    - 当前 2 个 demo commands:`app_info` / `ping`(W14-B+ 接着实装 8 个对齐 MCP 工具)
+    - **首次 `cargo tauri dev` 未跑**:Tauri 数百个 crate 拉不下来,撞 sparse SSL;留给下次会话换网络 / vendor dependencies 后跑
+    - commit:`839a95f feat(ui): W14-B — Tauri 2 desktop shell 启动骨架 (media-to-doc-ui)`(独立 repo,local only)
+    - handoff:`handoff-pipeline-w14b-tauri-bootstrap-2026-07-22.md`
+- [ ] **W14-C Tauri UI 真跑 hello world + 实装 8 commands**(估 4-6h,需换网络或预 vendor Tauri 依赖)
+  - 首次 `cargo tauri dev` 跑通 hello world
+  - 实装 8 Tauri commands 对齐 MCP 8 工具(`list_courses` / `run_pipeline` / `check_status` / `list_outputs` / `read_lecture` / `get_run_metrics` / `list_runs` / `cancel_run`)
+  - 前端 UI 组件:ProgressBar / LogPanel / 多视频目录选择
+  - 单实例锁 `tauri-plugin-single-instance`
+  - 真实 11 stage pipeline 端到端验证
 
 ---
 
