@@ -389,7 +389,9 @@ print(f"total_runs={runs['total_runs']}, llm_health={runs['llm_health_global']}"
 | v1.2.0 | LLM-driven chapter fusion(W12-D 硬切 → LLM 内容融合) | ✅ W12-E |
 | v1.2.1 | longdoc W12-D 3 级 fallback + fusion proxy 隔离(W13-A 撞出的 2 个 P1 bug) | ✅ W14-A |
 | v1.2.2 (planned) | OllamaProvider `trust_env=False` 代码层消除 HTTP_PROXY 污染 | ✅ W14-B (`427d963`) |
-| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 + log tail + modal | ✅ W14-B+ + W14-B+2(分支 `feat/w14b-plus-8-commands`,8 commit,39 unit test / 0 failed) |
+| **v1.3 Phase 2 — Tauri UI** | 3 次点击跑通 + 桌面壳 + log tail + modal | ✅ W14-B+ + W14-B+2(分支 `feat/w14b-plus-8-commands`,8 commit,39 unit test / 0 failed)+ W14-C A 多课程并发 + B NSIS |
+| **v1.3.0 subrepo Release** | 子仓 kizemo/media-to-doc-ui v1.3.0 + NSIS installer + Tauri portable | ✅ W14-D C(subrepo 推到 origin,gh release 公开) |
+| **trust_env 全 provider** | Ollama / Anthropic / OpenAICompat 三个 provider 透传 `httpx.Client(trust_env=False)` | ✅ W14-D E(防公司 VPN 父 shell 代理劫持,598 → 604 passed) |
 | **v1.4 Phase 3 — NSIS 安装器** | Win11 桌面一键安装 | 待开始(W14-B+2 完整 UI + log tail 后续) |
 | **L3 — 优化** | Prompt 自适应 / 自动重试 / 跨 Agent 经验晋升 | 留作未来 |
 
