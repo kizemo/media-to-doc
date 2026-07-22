@@ -1,7 +1,7 @@
 # Handoff — W14-D C+E:Tauri UI v1.3.0 Release + 全 Provider trust_env=False
 
 **日期**:2026-07-22
-**主仓分支**:`release/v1.0` + 自动 merge `main`
+**主仓分支**:`release/v1.0` + 部分 merge:`b283d64` fix(llm) 已 auto-merge `main`,`8cb20b6` docs(release) 未 merge 未 push(等拍板)
 **子仓分支**:`master` + tag v1.3.0 → 推到 origin
 **本会话成果**:C 子仓 v1.3.0 GitHub Release + E Anthropic + OpenAICompat trust_env=False
 
@@ -18,7 +18,7 @@
 
 - **子仓 push**:SSH protocol + `git push -u origin master` + `git push origin tag v1.3.0`
 - **NSIS 编译**:系统 NSIS 3.12(`C:\Program Files (x86)\NSIS\makensis.exe`)跑 `installer.nsi`,补 W14-C B 跳过的实编译
-- **2 assets**:`media-to-doc-1.3.0-setup.exe`(~1.5MB)+ `media-to-doc-1.3.0-portable.exe`(~6.2MB,cp 自 `target/release/media-to-doc-ui.exe`)
+- **2 assets**:`media-to-doc-1.3.0-setup.exe`(~1.5MB)+ `media-to-doc-1.3.0-portable.exe`(~6.2MB,cp 自 `src-tauri/target/release/media-to-doc-ui.exe`,即 cargo 默认 output)
 - **gh release create**:`--target master` + `--notes-file docs/RELEASE_NOTES_v1.3.0.md` + 2 assets
 
 ### E:trust_env=False 全 provider
@@ -30,12 +30,13 @@
 - pytest 598 → 604 passed / 0 skipped / 0 failed
 - ruff:All checks passed
 
-## 主仓 commit log(release/v1.0,领先 origin/main 20 commit)
+## 主仓 commit log(release/v1.0,ahead 1 / behind 1 vs origin/main)
 
 ```
-[fix(llm): W14-D — extend trust_env=False to Anthropic + OpenAICompat providers]
-[docs(release): W14-D — subrepo v1.3.0 NSIS installer build + GitHub Release]
-[docs(project): W14-D — CLAUDE.md §10 + task.md sync W14-D state]
+`b283d64` fix(llm): W14-D — extend trust_env=False to Anthropic + OpenAICompat providers
+   └─ merged to main as `c5c1fb3`(per §5.6 pre-authorize,已 push origin/main)
+`8cb20b6` docs(release): W14-D — subrepo v1.3.0 NSIS installer build + GitHub Release
+   └─ NOT merged, NOT pushed(等用户拍板,per §5.6 docs 类不自动 merge)
 ```
 
 ## 子仓 commit log(master,tag v1.3.0)
@@ -52,7 +53,7 @@
 | `tests/test_llm/test_openai_compat.py` | +3 用例(同上) |
 | `.learnings/LEARNINGS.md` | +LP-20260722-W14D-001(defense in depth) |
 | `docs/RELEASE_NOTES_v1.3.0.md` | 新建(主仓记录 subrepo 发布) |
-| `media-to-doc-ui/src-tauri/nsis/LICENSE.txt` | 新建(cp LICENSE 给 NSIS MUI_PAGE_LICENSE) |
+| `media-to-doc-ui/src-tauri/nsis/LICENSE.txt` | (W14-C B 已 commit,本会话未改) |
 
 ## Release URL
 
@@ -65,7 +66,8 @@
 - [x] SHA256 verified(本地 vs gh release view)
 - [x] pytest 604 passed / 0 skipped
 - [x] ruff:All checks passed
-- [x] release/v1.0 已 merge 到 main(per CLAUDE.md §5.6 pre-authorize)
+- [x] `b283d64` fix(llm) 已 auto-merge `main` 并 push origin(per §5.6 pre-authorize)
+- [ ] `8cb20b6` docs(release) 未 push 未 merge(等用户拍板,per §5.6 docs 类)
 
 ## 下次会话候选
 
