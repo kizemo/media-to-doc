@@ -223,6 +223,21 @@ test(<scope>): <description>
 - Bash 调用 >100 → 拆任务或新开会话
 - 撞墙征兆出现 → 立即写 `handoff-<topic>-<date>.md`,再决定是否继续
 
+### 5.6 Session-level pre-authorize
+
+本会话及后续会话的自动合并/审核规则(W14-C 用户确认,2026-07-22):
+
+| 触发条件 | 行为 |
+|---|---|
+| commit 含 `fix:` + 测试通过 + reviewer 通过 | **自动 merge master**,无需 ask |
+| commit 含 `feat:` + 测试通过 + reviewer 通过 | **写 handoff,等用户拍板**,不自动 merge |
+| commit 含 `wip` / `draft` | **永不 merge**,只写 handoff |
+| 修改 `commands.rs` / `runner.rs`(Rust) | **必须 review 2 轮**(本会话 + 上一会话 reviewer),不能单轮 |
+| 修改 `index.html`(frontend) | **单轮 review OK** |
+
+**为什么这样设计**:fix 类改动风险低,自动合入减少排队;feat 类需用户确认方向;
+Rust 后端改影响面大,双轮 review 防回归。
+
 ---
 
 ## 6. 文档维护
