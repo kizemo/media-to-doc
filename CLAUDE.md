@@ -434,3 +434,27 @@ uv pip install --upgrade media_to_doc==<NEW_VERSION>
 ```
 
 完整历史:看 `task.md` §会话历史 + 各 `handoff-*.md`。
+
+---
+
+## 11. 真机装机验证 (sandbox-verify)
+
+沙箱验证脚本: `F:\soft\00selfmade\sandbox-verify\media-to-doc-ui\`(详见顶层 README)。
+
+适用场景:v1.3.0+ 的 Tauri 桌面壳(NSIS installer + portable)。纯 Python wheel(`.whl`)不走沙箱,用 `uv pip install --upgrade media-to_doc==<ver>` 验证即可。
+
+典型调用:
+- Tauri NSIS installer:`mtd-verify.ps1 -InstallerPath target/release/bundle/nsis/media-to-doc-*-setup.exe`
+- 加上 portable:`-PortablePath target/release/bundle/media-to-doc-*-portable.exe`
+- 失败时:读 `C:\Users\Duanyi\sandbox-artifacts\mtd\logs\verify.log` + 看 `screenshots\`
+
+**产物路径发现**:
+- 主体 installer:`target\release\bundle\nsis\media-to-doc-*-setup.exe`
+- 便携版:`target\release\bundle\media-to-doc-*-portable.exe`
+- 仅在 `cargo tauri build` 之后才有,`uv build` 不产生
+
+**强制时机**(改动以下文件后必须跑):
+- `src-tauri/tauri.conf.json`(版本 / 入口)
+- `src-tauri/nsis/installer.nsi`(打包脚本)
+- `src-tauri/Cargo.toml`(依赖 bump)
+- `src-tauri/capabilities/`(权限白名单)
